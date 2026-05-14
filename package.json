@@ -1,6 +1,6 @@
 {
   "name": "fusabase-ns",
-  "version": "26.1.0",
+  "version": "26.1.1",
   "description": "",
   "main": "fusabase.js",
   "type": "module",

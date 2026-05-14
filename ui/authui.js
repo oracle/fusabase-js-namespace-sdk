@@ -37,12 +37,9 @@ export const authUI = {
       constructor(appOrConfig) {
         if (appOrConfig instanceof app.App) {
           this.app = appOrConfig;
-          this.auth = getAuth(this.app);
+          this.auth = appOrConfig.auth();
         } else if (appOrConfig instanceof auth.Auth) {
           this.auth = appOrConfig;
-        } else {
-          this.app = initializeApp(appOrConfig);
-          this.auth = getAuth(this.app);
         }
       }
 
