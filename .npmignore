@@ -1,0 +1,13 @@
+docs-md/
+docs-html/
+docs/
+node_modules/
+test/
+.vscode/
+.eslintrc.json
+.gitignore
+.npmrc
+*.tgz
+*.zip
+fusabase-ns-version.txt
+test_and_deploy.sh

@@ -1,0 +1,9 @@
+node_modules
+*.zip
+*.tgz
+/test_and_deploy.sh
+.vscode
+docs
+/test/video
+/test/test_misc.js
+package-lock.json

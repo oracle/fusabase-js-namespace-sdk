@@ -1,0 +1,19 @@
+{
+  "entryPoints": [
+    "./"
+  ],
+  "entryPointStrategy": "expand",
+  "excludeInternal": true,
+  "out": "docs/html",
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/*.test.*",
+    "**/__tests__/**"
+  ],
+  "name": "Oracle® Backend For Firebase JavaScript Namespace SDK Reference, Release 26.1.0",
+  "readme": "README.md",
+  "plugin": ["./typedoc-plugin-oracle-branding.cjs"]
+}

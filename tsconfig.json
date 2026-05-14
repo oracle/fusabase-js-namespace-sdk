@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "strict": false,
+    "allowJs": false,
+    "declaration": true,
+    "emitDeclarationOnly": true
+  },
+  "include": ["**/*.d.ts"]
+}

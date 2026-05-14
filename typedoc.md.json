@@ -1,0 +1,18 @@
+{
+  "entryPoints": [
+    "./"
+  ],
+  "entryPointStrategy": "expand",
+  "excludeInternal": true,
+  "out": "docs/md",
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/build/**",
+    "**/coverage/**",
+    "**/*.test.*",
+    "**/__tests__/**"
+  ],
+  "plugin": ["typedoc-plugin-markdown"],
+  "readme": "README.md"
+}

@@ -1,0 +1,55 @@
+{
+  "name": "fusabase-ns",
+  "version": "26.1.0",
+  "description": "",
+  "main": "fusabase.js",
+  "type": "module",
+  "exports": {
+    ".": "./fusabase.js",
+    "./auth": "./auth/auth.js",
+    "./oracledb": "./oracledb/oracledb.js",
+    "./storage": "./storage/storage.js",
+    "./app": "./app/app.js",
+    "./ui": "./ui/authui.js",
+    "./app-trust": "./app-trust/index.js"
+  },
+  "browser": {
+    ".": "./fusabase.js",
+    "./ui": "./ui/authui.js",
+    "./app": "./app/app.js",
+    "./auth": "./auth/auth.js",
+    "./oracledb": "./oracledb/oracledb.js",
+    "./storage": "./storage/storage.js",
+    "./app-trust": "./app-trust/index.js"
+  },
+  "scripts": {
+    "test": "mocha",
+    "docs:html": "typedoc --options typedoc.html.json",
+    "docs:md": "typedoc --options typedoc.md.json",
+    "docs": "npm run docs:html && npm run docs:md"
+  },
+  "author": "Oracle",
+  "license": "ISC",
+  "devDependencies": {
+    "chai": "^5.2.1",
+    "eslint": "^9.37.0",
+    "mocha": "^11.7.1",
+    "typedoc": "^0.28.14",
+    "typedoc-plugin-markdown": "^4.9.0"
+  },
+  "files": [
+    "app",
+    "app-trust",
+    "auth",
+    "oracledb",
+    "storage",
+    "ui",
+    "logger.d.ts",
+    "logger.js",
+    "fusabase.js",
+    "fusabase.d.ts",
+    "LICENSE.txt",
+    "package.json",
+    "README.md"
+  ]
+}
