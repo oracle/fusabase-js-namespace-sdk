@@ -36,6 +36,17 @@ import { FieldPath } from "../field/path.js";
 import { deepEqual } from "../utils/utils_helper.js";
 import { extractCallbacksForSnapshot } from "../utils/snapshot_util.js";
 import { IdTokenResult } from "../../auth/types/idtoken.js";
+import { normalizeLongPollingOptions } from "../internal/settings.js";
+
+function getLongPollingIntervalMs(db) {
+  try {
+    return normalizeLongPollingOptions(
+      db._settings.experimentalLongPollingOptions
+    ).timeoutSeconds * 1000;
+  } catch (err) {
+    throw oracledbErrorHandler(err);
+  }
+}
 
 /**
  * Query - Query class to store all the clauses and parameters. 
@@ -969,22 +980,19 @@ export class Query {
       unsubscribe = () => {
         Utils.baasLogger(this.oracledb.app.logLevel, "in unsubscribe", _queryId);
 
-        const index = this.oracledb.__snaps[queryId].indexOf(_queryId);
-        if (index > -1) {
-          this.oracledb.__snaps[queryId].splice(index, 1);
-          delete this.oracledb.__callbacks[_queryId];
-        }
+        const activeListeners = this.oracledb.__snaps[queryId];
+        if (activeListeners) {
+          const index = activeListeners.indexOf(_queryId);
+          if (index > -1) {
+            activeListeners.splice(index, 1);
+            delete this.oracledb.__callbacks[_queryId];
+          }
 
-        const unSubQueryObject = {
-          queryId: queryId,
-          status: 0,
-          payload: payload
-        }
-
-        if (this.oracledb.__snaps[queryId].length === 0) {
-          delete this.oracledb.__queryIdMap[queryId];
-          delete this.oracledb.__snaps[queryId];
-          this.oracledb.__sendMessage(unSubQueryObject);
+          if (activeListeners.length === 0) {
+            delete this.oracledb.__queryIdMap[queryId];
+            delete this.oracledb.__snaps[queryId];
+            this.oracledb.__sendMessage({ queryId, status: 0, payload });
+          }
         }
 
         if (callback.error != null) {
@@ -1032,6 +1040,7 @@ export class Query {
 
       const db = this.oracledb;
       const colRef = this;
+      const pollingIntervalMs = getLongPollingIntervalMs(db);
 
       //polling
       function startPolling() {
@@ -1116,9 +1125,7 @@ export class Query {
           }).catch(e => { Utils.baasLogger(db.app.logLevel, e) })
         }
 
-        let intervalId = setInterval(executeTask,
-          db._settings.experimentalLongPollingOptions.timeoutSeconds*1000);
-        // Continue to execute every 29 seconds
+        let intervalId = setInterval(executeTask, pollingIntervalMs);
 
         // Return a function to stop the continuous execution
         return function stopExecution() {

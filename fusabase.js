@@ -27,6 +27,10 @@
 
 import app from "./app/app.js";
 import { getOrCreateBrowserInstanceId } from './app/instance-id.js';
+import {
+  DEFAULT_LONG_POLLING_TIMEOUT_SECONDS,
+  validateLongPollingTimeoutSeconds
+} from "./oracledb/internal/settings.js";
 
 const DEFAULT_MAX_UPLOAD_BYTES = 100 * 1024 * 1024;
 
@@ -54,6 +58,18 @@ const errorMessages = {
 };
 
 
+function getConfiguredLongPollingInterval(options) {
+  if (!Object.prototype.hasOwnProperty.call(options, "long_polling_interval")) {
+    return DEFAULT_LONG_POLLING_TIMEOUT_SECONDS;
+  }
+
+  try {
+    return validateLongPollingTimeoutSeconds(options["long_polling_interval"]);
+  } catch (err) {
+    throw appErrorHandler(err);
+  }
+}
+
 var fusabase = {
 
   _apps: {},
@@ -76,13 +92,9 @@ argCheck(options_sdk["project_id"], errorMessages.invalidProjectId, true, [typeS
 argCheck(options_sdk["objs_type"], errorMessages.invalidObjsType, true, [typeStrings.STRING]);
 argCheck(options_sdk["storage_bucket"], errorMessages.invalidStorageBucket, true, [typeStrings.STRING]);
 argCheck(options_sdk["auth_type"], errorMessages.invalidAuthType, true, [typeStrings.STRING]);
-    if (!options_sdk["idcs_config"]) {
 argCheck(options_sdk["auth_id"], errorMessages.invalidAuthId, true, [typeStrings.STRING]);
-    }
-    if (options_sdk["idcs_config"]) {
-argCheck(options_sdk["idcs_config"]["domain_url"], errorMessages.invalidDomainUrl, true, [typeStrings.STRING]);
-argCheck(options_sdk["idcs_config"]["clientId"], errorMessages.invalidClientId, true, [typeStrings.STRING]);
-argCheck(options_sdk["idcs_config"]["clientSecret"], errorMessages.invalidClientSecret, true, [typeStrings.STRING]);
+    if (String(options_sdk["auth_type"]).toLowerCase() === "idcs") {
+argCheck(options_sdk["idcs_domain_url"], errorMessages.invalidDomainUrl, true, [typeStrings.STRING]);
     }
 argCheck(options_sdk["use_socket"], errorMessages.invalidSocketValue, false, [typeStrings.BOOL]);
 argCheck(options_sdk["long_polling_interval"], errorMessages.invalidPollingInterval, false, [typeStrings.INT]);
@@ -97,6 +109,7 @@ argCheck(options_sdk["max_upload_bytes"], errorMessages.invalidMaxUploadBytes, f
       error.status = 400;
       throw appErrorHandler(error);
     }
+    const longPollingInterval = getConfiguredLongPollingInterval(options_sdk);
     const options = {
       ordsHost: options_sdk["ords_host"],
       schema: options_sdk["schema"],
@@ -106,22 +119,15 @@ argCheck(options_sdk["max_upload_bytes"], errorMessages.invalidMaxUploadBytes, f
       storageBucket: options_sdk["storage_bucket"],
       authType: options_sdk["auth_type"].toLowerCase(),
       authID: options_sdk["auth_id"],
+      idcsDomainURL: options_sdk["idcs_domain_url"],
       appType: options_sdk["app_type"],
       useSocket: options_sdk["use_socket"]==true ? options_sdk["use_socket"] : false,
-      longPollingInterval: options_sdk["long_polling_interval"] ? options_sdk["long_polling_interval"] : 29,
+      longPollingInterval,
       useOracledbVersion:  options_sdk["version"] ? options_sdk["version"] : 2,
       chunkSize: options_sdk["upload_chunk_size"] ? options_sdk["upload_chunk_size"] : 16*1024*1024,
       maxUploadBytes: options_sdk["max_upload_bytes"] != null ? options_sdk["max_upload_bytes"] : DEFAULT_MAX_UPLOAD_BYTES,
-      appCheckToken: options_sdk["appCheckToken"] ? options_sdk["appCheckToken"] : null,
+      appTrustToken: options_sdk["appTrustToken"] ? options_sdk["appTrustToken"] : null,
     };
-    if (options_sdk["idcs_config"] != null) {
-      options["idcsConfig"] = {
-        domainURL: options_sdk["idcs_config"]["domain_url"],
-        clientId: options_sdk["idcs_config"]["clientId"],
-        clientSecret: options_sdk["idcs_config"]["clientSecret"],
-        selfRegistrationProfile: ""
-      }
-    }
     var appInstance = new app.App(options, name);
 
     try {

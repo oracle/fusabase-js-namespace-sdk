@@ -38,4 +38,4 @@ export {
   HCaptchaProvider,
 } from './public-types.js';
 
-export { FusabaseAppCheckError } from './errors.js';
+export { FusabaseAppTrustError } from './errors.js';

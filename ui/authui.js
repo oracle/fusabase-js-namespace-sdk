@@ -393,7 +393,7 @@ export const authUI = {
         };
 
         logoutBtn.onclick = async () => {
-          await signOut(this.auth);
+          await this.auth.signOut();
         };
 
         this.auth.onAuthStateChanged(user => {

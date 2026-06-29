@@ -27,7 +27,7 @@
 import endpoints from './const.js';
 import { checkOracledbApiVersion, OracledbVersion, Utils } from "./utils.js";
 import { formatMessage, errorMessages } from "../errors.js";
-import { attachAppCheckHeader } from '../../app/app-trust-header.js';
+import { attachAppTrustHeader } from '../../app/app-trust-header.js';
 import { fusabaseFetch } from '../../app/fusabase-fetch.js';
 
 /**

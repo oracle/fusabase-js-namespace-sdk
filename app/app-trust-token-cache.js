@@ -24,21 +24,21 @@
 //
 //-----------------------------------------------------------------------------
 
-const APP_CHECK_TOKEN_CACHE = new WeakMap();
+const APP_TRUST_TOKEN_CACHE = new WeakMap();
 
 /** @internal */
-export function getCachedAppCheckToken(app) {
-  return app ? APP_CHECK_TOKEN_CACHE.get(app) : undefined;
+export function getCachedAppTrustToken(app) {
+  return app ? APP_TRUST_TOKEN_CACHE.get(app) : undefined;
 }
 
 /** @internal */
-export function setCachedAppCheckToken(app, token) {
+export function setCachedAppTrustToken(app, token) {
   if (!app || typeof token !== "string" || !token) return;
-  APP_CHECK_TOKEN_CACHE.set(app, token);
+  APP_TRUST_TOKEN_CACHE.set(app, token);
 }
 
 /** @internal */
-export function clearCachedAppCheckToken(app) {
+export function clearCachedAppTrustToken(app) {
   if (!app) return;
-  APP_CHECK_TOKEN_CACHE.delete(app);
+  APP_TRUST_TOKEN_CACHE.delete(app);
 }

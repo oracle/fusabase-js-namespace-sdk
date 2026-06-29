@@ -27,7 +27,7 @@ describe("OBAAS Auth Tests", function () {
   const phoneNumber2 = "1234567892";
 
   before(() => {
-    app = fusabase.initializeApp({...options,appCheckToken:"APP_CHECK_TOKEN"}, 'test');
+    app = fusabase.initializeApp({...options,appTrustToken:"APP_TRUST_TOKEN"}, 'test');
     fusabase.setLogLevel(LogLevel.ERROR);
     auth_c = fusabase.auth(app);
   });

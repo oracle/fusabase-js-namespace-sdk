@@ -26,11 +26,11 @@
 // 
 
 export type {
-  AppCheck,
-  AppCheckOptions,
-  AppCheckToken,
-  AppCheckTokenListener,
-  AppCheckTokenResult,
+  AppTrust,
+  AppTrustOptions,
+  AppTrustToken,
+  AppTrustTokenListener,
+  AppTrustTokenResult,
   Unsubscribe,
 } from './public-types.js';
 
@@ -48,4 +48,4 @@ export {
   onTokenChanged,
 } from './app-trust.js';
 
-export { FusabaseAppCheckError } from './errors.js';
+export { FusabaseAppTrustError } from './errors.js';

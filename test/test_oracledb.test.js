@@ -43,7 +43,7 @@ describe('OBAAS Integration Tests for version 1', function () {
   
 
   it('should initialize the app', () => {
-    app = fusabase.initializeApp({...options,appCheckToken:"APP_CHECK_TOKEN"}, 'test');
+    app = fusabase.initializeApp({...options,appTrustToken:"APP_TRUST_TOKEN"}, 'test');
     expect(app.options.ordsHost, options.ords_host);
     expect(app.options.schema, options.schema);
     expect(app.options.appID, options.app_id);
@@ -869,7 +869,7 @@ describe('OBAAS Integration Tests for version 2', function () {
   };
 
   it('should initialize the app', () => {
-    app = fusabase.initializeApp({...options,appCheckToken:"APP_CHECK_TOKEN"}, 'test');
+    app = fusabase.initializeApp({...options,appTrustToken:"APP_TRUST_TOKEN"}, 'test');
     expect(app.options.ordsHost, options.ords_host);
     expect(app.options.schema, options.schema);
     expect(app.options.appID, options.app_id);

@@ -24,8 +24,6 @@
 //
 //-----------------------------------------------------------------------------
 
-import { authErrorHandler } from "../errors.js";
-
 /**
  * Retrieves the configuration for authentication based on the application settings.
  * @param {Object} app - The application object containing configuration options.
@@ -45,15 +43,14 @@ export function getConfig(app) {
     )
   } else if (projectConfig.authType === 'idcs') {
     return new IDCSConfig(
-      projectConfig.idcsConfig.domainURL,
-      projectConfig.ordsHost,
-      projectConfig.idcsConfig.clientId,
-      projectConfig.idcsConfig.clientSecret,
-      projectConfig.idcsConfig.selfRegistrationProfile,
+      projectConfig.ordsHost + "_/baas-services/idm/idcs/" + projectConfig.projectID + "/",
       projectConfig.appID,
-      projectConfig.projectID
+      projectConfig.authID,
+      projectConfig.authType,
+      projectConfig.projectID,
+      projectConfig.idcsDomainURL || ""
     )
-  } 
+  }
   // else if (projectConfig.authType === 'base_s'
   //   || projectConfig.authType === 'ldap_s') {
   //   return new ONPREMSRPConfig(
@@ -109,7 +106,7 @@ export class ONPREMConfig extends Config {
    * Endpoint for updating profile.
    * @type {string}
    */
-  static UPDATE_PROFILE_HELPER = "updateProfile";
+  static UPDATE_PROFILE_HELPER = "profile";
 
   /**
    * Endpoint for revoking refresh token.
@@ -174,116 +171,11 @@ export class ONPREMConfig extends Config {
 /**
  * Configuration class for IDCS authentication.
  */
-export class IDCSConfig extends Config {
-
-  /**
-   * Endpoint for authentication.
-   * @type {string}
-   */
-  static AUTHENTICATE_REST_EP = "/sso/v1/sdk/authenticate";
-
-  /**
-   * Endpoint for exchanging OAuth token.
-   * @type {string}
-   */
-  static OAUTH_TOKEN_REST_EP = "/oauth2/v1/token";
-
-  /**
-   * Endpoint for managing self.
-   * @type {string}
-   */
-  static SELF_ME_REST_EP = "/admin/v1/Me";
-
-  /**
-   * Endpoint for logout.
-   * @type {string}
-   */
+export class IDCSConfig extends ONPREMConfig {
   static LOGOUT_REST_EP = "/oauth2/v1/userlogout";
 
-  /**
-   * Endpoint for revoking refresh token.
-   * @type {string}
-   */
-  static REVOKE_REFRESH_TOKEN_REST_EP = "/oauth2/v1/revoke";
-
-  /**
-   * Endpoint for sending password reset email.
-   * @type {string}
-   */
-  static SEND_PASSWORD_RESET_EMAIL = "/admin/v1/MePasswordResetRequestor"
-
-  /**
-   * Endpoint for confirming password reset.
-   * @type {string}
-   */
-  static CONFIRM_PASSWORD_RESET = "/admin/v1/MePasswordResetter"
-
-  /**
-   * Endpoint for verifying password reset code.
-   * @type {string}
-   */
-  static VERIFY_PASSWORD_RESET_CODE = "/admin/v1/UserTokenValidator"
-
-  /**
-   * Endpoint for updating password.
-   * @type {string}
-   */
-  static UPDATE_PASSWORD_HELPER = "/admin/v1/MePasswordChanger"
-
-  /**
-   * Endpoint for sending email verification.
-   * @type {string}
-   */
-  static SEND_EMAIL_VERIFICATION = "/admin/v1/MeEmailVerifier";
-
-  /**
-   * Endpoint for redirect result.
-   * @type {string}
-   */
-  static REDIRECT_RESULT_EP = "redirectResult";
-
-  static ADD_USER_REST_EP = "useradd";
-
-  static FETCH_FUSABASE_TOKEN = "tokenExchange"
-
-  /**
-   * Creates a new IDCSConfig instance.
-   * @param {string} domainURL - The domain URL for IDCS.
-   * @param {string} ordsHost - The ORDS host.
-   * @param {string} clientId - The client ID.
-   * @param {string} clientSecret - The client secret.
-   * @param {string} selfRegistrationProfile - The self-registration profile.
-   * @param {string} appID - The application ID.
-   * @param {string} projectID - The project ID.
-   * @throws {Error} If domainURL, clientId, or clientSecret is not provided.
-   */
-  constructor(domainURL,  ordsHost, clientId, clientSecret, selfRegistrationProfile, appID,
-     projectID) {
-    // Validating Arguments
-    super('idcs');
-
-    if (domainURL.length === 0) {
-      let error = new Error(`Domain URL is not provided`);
-      error.status = 400;
-      throw authErrorHandler(error);
-    }
-    else if (clientId.length === 0) {
-      let error = new Error(`Client ID is not provided`);
-      error.status = 400;
-      throw authErrorHandler(error);
-    }
-    else if (clientSecret.length === 0) {
-      let error = new Error(`Client Secret is not provided`);
-      error.status = 400;
-      throw authErrorHandler(error);
-    }
-
-    this.domainURL = domainURL;
-    this.ordsHost = ordsHost;
-    this.appID = appID
-    this.clientId = clientId;
-    this.clientSecret = clientSecret;
-    this.selfRegistrationProfile = selfRegistrationProfile;
-    this.projectID = projectID;
+  constructor(domainURL, appID, authID, authType, projectID, idcsDomainURL = "") {
+    super(domainURL, appID, authID, authType, projectID);
+    this.idcsDomainURL = idcsDomainURL.replace(/\/+$/, "");
   }
 }

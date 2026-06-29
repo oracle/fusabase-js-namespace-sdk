@@ -10,7 +10,7 @@ describe("OBAAS Storage Tests", function () {
     let app, storage, ref1, ref2, ref3;
 
     it("should initialize app with correct options", function () {
-        app = fusabase.initializeApp({...options,appCheckToken:"APP_CHECK_TOKEN"}, 'test');
+        app = fusabase.initializeApp({...options,appTrustToken:"APP_TRUST_TOKEN"}, 'test');
     
         expect(app.options.ordsHost).to.equal(options.ords_host);
         expect(app.options.schema).to.equal(options.schema);

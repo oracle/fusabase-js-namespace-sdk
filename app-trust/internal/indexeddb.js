@@ -65,19 +65,19 @@ async function withStore(mode, fn) {
   }
 }
 
-export async function idbGetAppCheckToken(key) {
+export async function idbGetAppTrustToken(key) {
   if (!hasIndexedDb()) return undefined;
   const result = await withStore('readonly', (store) => store.get(key));
   if (!result || typeof result !== 'object') return undefined;
   return result;
 }
 
-export async function idbSetAppCheckToken(key, value) {
+export async function idbSetAppTrustToken(key, value) {
   if (!hasIndexedDb()) return;
   await withStore('readwrite', (store) => store.put(value, key));
 }
 
-export async function idbRemoveAppCheckToken(key) {
+export async function idbRemoveAppTrustToken(key) {
   if (!hasIndexedDb()) return;
   await withStore('readwrite', (store) => store.delete(key));
 }

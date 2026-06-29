@@ -26,7 +26,7 @@
 // 
 
 import LogLevel from "../../logger.js";
-import { attachAppCheckHeader } from "../../app/app-trust-header.js";
+import { attachAppTrustHeader } from "../../app/app-trust-header.js";
 import { fusabaseFetch } from "../../app/fusabase-fetch.js";
 import { redactLogData } from "../../app/log-redaction.js";
 
@@ -53,7 +53,7 @@ export function fetchWithRetry(url, options, maxRetryTime, app) {
   const delay = 200;
   return new Promise((resolve, reject) => {
     function fetchWithDelay() {
-      // If caller provided an app via options.app, attach app check headers.
+      // If caller provided an app via options.app, attach App Trust headers.
       // We keep this backwards compatible by stripping the internal field.
       fusabaseFetch(app, url, options)
         .then(response => resolve(response))

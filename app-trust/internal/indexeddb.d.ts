@@ -24,12 +24,12 @@
 //
 //-----------------------------------------------------------------------------
 
-export type PersistedAppCheckToken = {
+export type PersistedAppTrustToken = {
   token: string;
   expireTimeMillis: number;
   updatedAtMillis: number;
 };
 
-export declare function idbGetAppCheckToken(key: string): Promise<PersistedAppCheckToken | undefined>;
-export declare function idbSetAppCheckToken(key: string, value: PersistedAppCheckToken): Promise<void>;
-export declare function idbRemoveAppCheckToken(key: string): Promise<void>;
+export declare function idbGetAppTrustToken(key: string): Promise<PersistedAppTrustToken | undefined>;
+export declare function idbSetAppTrustToken(key: string, value: PersistedAppTrustToken): Promise<void>;
+export declare function idbRemoveAppTrustToken(key: string): Promise<void>;

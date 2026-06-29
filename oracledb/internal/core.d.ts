@@ -31,6 +31,7 @@ import { Transaction, WriteBatch } from "../transaction/batch.js";
 import { LoadBundleTask } from "./bundle.js";
 import {BulkUpdate} from "../transaction/bulk.js";
 import { DualityViewColReference, DualityViewDocReference } from "../dualityview/reference.js";
+import { OracledbSettings } from "./settings.js";
 
 /**
  * Oracledb - Represents a database instance.
@@ -185,7 +186,7 @@ export class Oracledb {
    *
    * @param {Object} obj - Settings object.
    */
-  settings(settings: any): void;
+  settings(settings: OracledbSettings): void;
 
   /**
    * Method to get `DualityViewColReference` instance that refers to the duality 
