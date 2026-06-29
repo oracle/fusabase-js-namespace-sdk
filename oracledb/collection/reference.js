@@ -39,6 +39,17 @@ import { Utils, OracledbVersion } from "../utils/utils.js";
 import { setWholeData, createPayloadForUpdateVersion2New, updateNestedData, serializeVersion2, extractEmbeddingsMapForCreate } from "../utils/utils_helper.js";
 import { extractCallbacksForSnapshot } from "../utils/snapshot_util.js";
 import { IdTokenResult } from "../../auth/types/idtoken.js";
+import { normalizeLongPollingOptions } from "../internal/settings.js";
+
+function getLongPollingIntervalMs(db) {
+  try {
+    return normalizeLongPollingOptions(
+      db._settings.experimentalLongPollingOptions
+    ).timeoutSeconds * 1000;
+  } catch (err) {
+    throw oracledbErrorHandler(err);
+  }
+}
 
 /**
  * CollectionReference - Represents a reference to a collection.
@@ -704,6 +715,7 @@ export class DocumentReference {
       this._rt = 1;
       let db = this.oracledb;
       let lastDocUpdate = null;
+      const pollingIntervalMs = getLongPollingIntervalMs(db);
 
       const getSnap = () => {
         this.get().then(docSnap => {
@@ -728,7 +740,7 @@ export class DocumentReference {
       let intervalId = setInterval(() => {
         getSnap();
 
-      }, this.oracledb._settings.experimentalLongPollingOptions.timeoutSeconds*1000);
+      }, pollingIntervalMs);
 
       // Return the unsubscribe function
       unsubscribe = () => {

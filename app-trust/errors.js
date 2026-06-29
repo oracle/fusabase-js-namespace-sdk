@@ -24,7 +24,7 @@
 //
 //-----------------------------------------------------------------------------
 
-export class FusabaseAppCheckError extends Error {
+export class FusabaseAppTrustError extends Error {
   /** @type {number | undefined} */
   status;
   /** @type {string | undefined} */
@@ -38,7 +38,7 @@ export class FusabaseAppCheckError extends Error {
    */
   constructor(message, opts) {
     super(message);
-    this.name = 'FusabaseAppCheckError';
+    this.name = 'FusabaseAppTrustError';
     this.status = opts?.status;
     this.code = opts?.code;
     this.cause = opts?.cause;

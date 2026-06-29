@@ -25,53 +25,125 @@
 //-----------------------------------------------------------------------------
 
 import { getOrCreateBrowserInstanceId } from './instance-id.js';
-import { getCachedAppCheckToken } from './app-check-token-cache.js';
+import { getCachedAppTrustToken } from './app-trust-token-cache.js';
 
-export const FUSABASE_APP_CHECK_HEADER = 'X-BAAS-AppCheck';
+export const FUSABASE_APP_TRUST_HEADER = 'X-BAAS-AppCheck';
 export const FUSABASE_INSTANCE_ID_HEADER = 'X-BAAS-InstanceId';
 
-function isAppCheckAttestEndpoint(url) {
-  return typeof url === 'string' && /\/_\/baas-services\/appcheck\/[^/]+\/attest(\?|$)/.test(url);
+function decodePathSegment(segment) {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+function getPathSegmentsAfterConfiguredHost(app, url) {
+  const configuredHost = String(app?.options?.ordsHost ?? '').trim();
+  if (!configuredHost) return null;
+
+  let parsed;
+  let expected;
+  try {
+    parsed = new URL(url);
+    expected = new URL(configuredHost);
+  } catch {
+    return null;
+  }
+
+  const expectedPath = expected.pathname.endsWith('/') ? expected.pathname : `${expected.pathname}/`;
+  if (parsed.origin !== expected.origin || !parsed.pathname.startsWith(expectedPath)) {
+    return null;
+  }
+
+  return {
+    parsed,
+    segments: parsed.pathname
+      .slice(expectedPath.length)
+      .split('/')
+      .filter((segment) => segment.length > 0),
+  };
+}
+
+function getProjectSegment(segments) {
+  if (segments[2] === 'idm') return segments[4];
+  if (segments[3] === 'par') return segments[4];
+  return segments[3];
+}
+
+function hasMatchingProject(segments, projectId) {
+  const projectSegment = getProjectSegment(segments);
+  return typeof projectSegment === 'string' &&
+    decodePathSegment(projectSegment) === projectId;
+}
+
+function hasMatchingAppId(parsed, appId) {
+  return parsed.searchParams.get('apiKey') === appId ||
+    parsed.searchParams.get('appID') === appId ||
+    parsed.searchParams.get('app_id') === appId;
+}
+
+function isAppTrustAttestEndpoint(segments, projectId) {
+  return segments.length >= 5 &&
+    segments[0] === '_' &&
+    segments[1] === 'baas-services' &&
+    segments[2] === 'appcheck' &&
+    decodePathSegment(segments[3]) === projectId &&
+    segments[4] === 'attest';
 }
 
 /** @internal */
-export function shouldAttachAppCheckHeader(url) {
-  if (typeof url !== 'string' || !url.includes('/_/baas-services/')) return false;
-  if (isAppCheckAttestEndpoint(url)) return false;
+export function shouldAttachAppTrustHeader(app, url) {
+  if (typeof url !== 'string') return false;
+
+  const projectId = String(app?.options?.projectID ?? '').trim();
+  const appId = String(app?.options?.appID ?? '').trim();
+  if (!projectId || !appId) return false;
+
+  const pathInfo = getPathSegmentsAfterConfiguredHost(app, url);
+  if (!pathInfo) return false;
+
+  const { parsed, segments } = pathInfo;
+  if (segments[0] !== '_' || segments[1] !== 'baas-services') return false;
+  if (isAppTrustAttestEndpoint(segments, projectId)) return false;
+  if (!hasMatchingProject(segments, projectId)) return false;
+  if (!hasMatchingAppId(parsed, appId)) return false;
   return true;
 }
 
 /** @internal */
-export function getAppCheckToken(app) {
+export function getAppTrustToken(app) {
   if (!app) return undefined;
-  const optTok = app?.options?.appCheckToken;
+  const optTok = app?.options?.appTrustToken;
   if (typeof optTok === 'string' && optTok) return optTok;
-  const cachedTok = getCachedAppCheckToken(app);
+  const cachedTok = getCachedAppTrustToken(app);
   if (typeof cachedTok === 'string' && cachedTok) return cachedTok;
+  const legacyTok = app?._appTrustToken;
+  if (typeof legacyTok === 'string' && legacyTok) return legacyTok;
+  const persistedTok = app?._appTrustTokenPersisted;
+  if (typeof persistedTok === 'string' && persistedTok) return persistedTok;
   return undefined;
 }
 
 /** @internal */
-export function attachAppCheckHeader(app, url, init) {
-  if (!shouldAttachAppCheckHeader(url)) return init;
+export function attachAppTrustHeader(app, url, init) {
+  if (!shouldAttachAppTrustHeader(app, url)) return init;
 
-  const tok = getAppCheckToken(app);
+  const tok = getAppTrustToken(app);
   const instanceId = app?._instanceId;
-  if (!tok && !instanceId) return init;
 
   const existing = init?.headers ?? {};
   const headers = new Headers(existing);
 
-  if (!headers.has(FUSABASE_APP_CHECK_HEADER)) {
-    if (tok) headers.set(FUSABASE_APP_CHECK_HEADER, tok);
-  }
-  if (!headers.has(FUSABASE_INSTANCE_ID_HEADER)) {
-    if (instanceId) {
-      const platform = String(app?.options?.appType ?? 'web').toLowerCase();
-      const appId = String(app?.options?.appID ?? '').trim();
-      const sanitizedInstanceId = String(instanceId).replace(/-/g, '');
-      headers.set(FUSABASE_INSTANCE_ID_HEADER, `${platform}|${appId}|${sanitizedInstanceId}`);
-    }
+  headers.delete(FUSABASE_APP_TRUST_HEADER);
+  headers.delete(FUSABASE_INSTANCE_ID_HEADER);
+
+  if (tok) headers.set(FUSABASE_APP_TRUST_HEADER, tok);
+  if (instanceId) {
+    const platform = String(app?.options?.appType ?? 'web').toLowerCase();
+    const appId = String(app?.options?.appID ?? '').trim();
+    const sanitizedInstanceId = String(instanceId).replace(/-/g, '');
+    headers.set(FUSABASE_INSTANCE_ID_HEADER, `${platform}|${appId}|${sanitizedInstanceId}`);
   }
 
   return {

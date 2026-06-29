@@ -33,7 +33,7 @@ const SENSITIVE_KEYS = new Set([
   "access_token",
   "apikey",
   "api_key",
-  "appchecktoken",
+  "apptrusttoken",
   "assertion",
   "authorization",
   "authorizationcode",

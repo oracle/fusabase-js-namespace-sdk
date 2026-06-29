@@ -24,7 +24,7 @@
 //
 //-----------------------------------------------------------------------------
 // 
-export declare class FusabaseAppCheckError extends Error {
+export declare class FusabaseAppTrustError extends Error {
   status?: number;
   code?: string;
   override cause?: unknown;

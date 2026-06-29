@@ -28,29 +28,29 @@
 
 import type { App } from '../app/app.js';
 
-/** The token returned from an App Check provider. */
-export interface AppCheckToken {
+/** The token returned from an App Trust provider. */
+export interface AppTrustToken {
   token: string;
   expireTimeMillis: number;
 }
 
 /** Result returned by getToken(). */
-export interface AppCheckTokenResult extends AppCheckToken {}
+export interface AppTrustTokenResult extends AppTrustToken {}
 
-/** A listener that is called whenever the App Check token changes. */
-export type AppCheckTokenListener = (token: AppCheckTokenResult) => void;
+/** A listener that is called whenever the App Trust token changes. */
+export type AppTrustTokenListener = (token: AppTrustTokenResult) => void;
 
 export type Unsubscribe = () => void;
 
-export interface AppCheckOptions {
+export interface AppTrustOptions {
   provider: ReCaptchaV3Provider | ReCaptchaEnterpriseProvider | TurnstileProvider | HCaptchaProvider;
   isTokenAutoRefreshEnabled?: boolean;
   /** Optional action passed to the attestation provider. Defaults to `baas-attest`. */
   attestationAction?: string;
 }
 
-/** The App Check service interface. */
-export interface AppCheck {
+/** The App Trust service interface. */
+export interface AppTrust {
   readonly app: App;
 }
 

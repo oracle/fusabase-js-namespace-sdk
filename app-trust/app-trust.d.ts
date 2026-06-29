@@ -26,24 +26,24 @@
 // 
 import type { App } from '../app/app.js';
 import type {
-  AppCheck,
-  AppCheckOptions,
-  AppCheckTokenResult,
-  AppCheckTokenListener,
+  AppTrust,
+  AppTrustOptions,
+  AppTrustTokenResult,
+  AppTrustTokenListener,
   Unsubscribe,
 } from './public-types.js';
 
-export declare function initializeAppTrust(app: App | undefined, options: AppCheckOptions): AppCheck;
+export declare function initializeAppTrust(app: App | undefined, options: AppTrustOptions): AppTrust;
 
-export declare function getToken(appCheckInstance: AppCheck, forceRefresh?: boolean): Promise<AppCheckTokenResult>;
+export declare function getToken(appTrustInstance: AppTrust, forceRefresh?: boolean): Promise<AppTrustTokenResult>;
 
-export declare function onTokenChanged(appCheckInstance: AppCheck, observer: { next?: (value: AppCheckTokenResult) => void; error?: (err: Error) => void; complete?: () => void }): Unsubscribe;
+export declare function onTokenChanged(appTrustInstance: AppTrust, observer: { next?: (value: AppTrustTokenResult) => void; error?: (err: Error) => void; complete?: () => void }): Unsubscribe;
 export declare function onTokenChanged(
-  appCheckInstance: AppCheck,
-  onNext: (tokenResult: AppCheckTokenResult) => void,
+  appTrustInstance: AppTrust,
+  onNext: (tokenResult: AppTrustTokenResult) => void,
   onError?: (error: Error) => void,
   onCompletion?: () => void
 ): Unsubscribe;
 
 // Internal: listener type is exported from public-types for convenience
-export type { AppCheckTokenListener };
+export type { AppTrustTokenListener };

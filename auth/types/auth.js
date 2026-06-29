@@ -43,7 +43,6 @@ import { EmailAuthProvider } from "../providers/email.js";
 import { OAuthCredential } from "./credential.js";
 import { User, UserCredential } from "./user.js";
 import { IDCSUserHelper, ONPREMUserHelper } from "../helpers/user_helper.js";
-import { IDCSConfig } from "../helpers/config.js";
 
 
 /**
@@ -259,7 +258,7 @@ export class Auth {
     argCheck(password, "Invalid password", true, [typeStrings.STRING]);
     let response = null;
     try {
-      await this.#authHelper.registerUser(email, password,  this.app.options.authType === "idcs" ? `${this.app.options.ordsHost}_/baas-services/idm/idcs/${this.app.options.projectID}/${IDCSConfig.ADD_USER_REST_EP}?apiKey=${this.app.options.appID}` : "");
+      await this.#authHelper.registerUser(email, password, "");
 
       response = await this.signInWithEmailAndPassword(email, password);
     }
@@ -487,13 +486,6 @@ export class Auth {
    * @returns {Promise<UserCredential>} User credential.
    */
   async signInWithPopup(provider) {
-
-    if (this.config.authType === 'idcs' &&
-      !(provider instanceof IDCSAuthProvider)) {
-      let error = new Error(getErrorMessage('INVALID_PROVIDER'));
-      error.status = 400;
-      throw authErrorHandler(error);
-    }
 
     if (this.config.authType != 'idcs' &&
       !(provider instanceof GoogleAuthProvider ||
@@ -745,7 +737,7 @@ export class Auth {
 
       const code = params.get("code");
 
-      const data = await this.#authHelper.getRedirectCredentials(code, this.app.options.auth_type === "idcs" ? `${this.app.options.ordsHost}_/baas-services/idm/idcs/${this.app.options.projectID}/${IDCSConfig.REDIRECT_RESULT_EP}` : "");
+      const data = await this.#authHelper.getRedirectCredentials(code, "");
 
       if (data && data.id_token && !data.access_token) {
         if (!this.currentUser) {
@@ -902,7 +894,15 @@ export class Auth {
   async signOut() {
     try {
       await this.#authHelper.performSignOut(this.currentUser.refreshToken);
+    }
+    catch (err) {
+    } 
+    try {
       await this.#syncLogoutPersistence();
+    }
+    catch (err) {
+    }
+    try {
       await this.updateCurrentUser(null);
     }
     catch (err) {

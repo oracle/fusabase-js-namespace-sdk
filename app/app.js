@@ -183,6 +183,7 @@ class App {
       storageBucket: this.options.storageBucket,
       authType: this.options.authType,
       authID: this.options.authID,
+      idcsDomainURL: this.options.idcsDomainURL,
       maxUploadBytes: this.options.maxUploadBytes
     }
     this.#config = config

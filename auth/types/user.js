@@ -33,7 +33,7 @@ import { IdTokenResult } from "./idtoken.js";
 import { GoogleAuthProvider } from "../providers/google.js";
 import { FacebookAuthProvider } from "../providers/facebook.js";
 import { GithubAuthProvider } from "../providers/github.js";
-import { IDCSConfig } from "../helpers/config.js";
+import { EmailAuthCredential } from "../types/credential.js";
 
 /**
  * Class representing the Users.
@@ -172,6 +172,11 @@ export class User {
    * @returns {Promise<string>} JWT accessToken.
    */
   async getIdToken(forceRefresh = false) {
+    if (this.#auth.currentUser && this.#auth.currentUser.email != this.email) {
+      let err = new Error("User mismatch!");
+      err.status = 400;
+      throw authErrorHandler(err);
+    }
     argCheck(forceRefresh, "Invalid value", true, [typeStrings.BOOL]);
     if (forceRefresh || !this.#userHelper.validateAccessToken()) {
       try {
@@ -211,7 +216,10 @@ export class User {
         } else throw authErrorHandler(err);
       }
       try {
-        this.#userHelper.fusabase_token = new IdTokenResult(await this.#userHelper.fetchFusabaseToken(`${this.#auth.app.options.ordsHost}_/baas-services/idm/idcs/${this.#config.projectID}/${IDCSConfig.FETCH_FUSABASE_TOKEN}?apiKey=${this.#config.appID}`));
+        const token = await this.#userHelper.fetchFusabaseToken("", this.#auth.app);
+        if (token) {
+          this.#userHelper.fusabase_token = new IdTokenResult(token);
+        }
       } catch (e) {
         Utils.baasLogger(this.#auth.app.logLevel,"could not fetch token");
       }
@@ -329,6 +337,12 @@ export class User {
  * @returns {Promise<UserCredential>} A promise that resolves with the user credential.
  */
 async linkWithCredential(credential) {
+    if (credential instanceof EmailAuthCredential 
+      && credential.email !== this.email) {
+        let error = new Error(getErrorMessage('INVALID_CREDENTIALS_SIMPLE'));
+        error.status = 400;
+        throw authErrorHandler(error);
+    }
     this.#userHelper.user = this;
     await this.#userHelper.linkWithCredentialHelper(credential);
     await this.reload();
@@ -343,39 +357,21 @@ async linkWithCredential(credential) {
  */
 async linkWithPopup(provider) {
 
-    if (this.#auth.app.options.authType === "idcs") {
-      let err = new Error(getErrorMessage('METHOD_NOT_IMPLEMENTED'));
-      err.status = ErrorCode.NOT_IMPLEMENT;
-      throw authErrorHandler(err);
-    }
-
     try {
       const method = provider.providerName;
-      const baseUrl = this.#auth.app.options.authType === "idcs"
-        ? `${this.#auth.app.options.ordsHost}_/baas-services/idm/idcs/${this.#auth.config.projectID}/socialLink`
-        : `${this.#auth.app.options.ordsHost}_/baas-services/idm/onprem/${this.#auth.config.projectID}/socialidp`;
+      const authTypePath = this.#auth.app.options.authType === "idcs" ? "idcs" : "onprem";
+      const baseUrl = this.#auth.app.options.ordsHost + "_/baas-services/idm/" + authTypePath + "/" + this.#auth.config.projectID + "/socialidp";
       const popupUrl = new URL(baseUrl);
       popupUrl.searchParams.set('method', method);
+      popupUrl.searchParams.set('device', 'web');
       popupUrl.searchParams.set('apiKey', this.#auth.app.options.appID);
+      popupUrl.searchParams.set('link', '1');
       popupUrl.searchParams.set(
         'context_uri',
-        `${window.location.origin}${window.location.pathname}`
+        window.location.origin + window.location.pathname
       );
-      if (this.#auth.app.options.authType !== "idcs") {
-        popupUrl.searchParams.set('device', 'web');
-        popupUrl.searchParams.set('link', '1');
-      }
 
       const tokensObj = await this.#userHelper.socialLink(popupUrl.toString());
-
-      if (this.#auth.app.options.authType === "idcs") {
-        if (tokensObj && tokensObj.success == 1) {
-          await this.reload();
-          return this.#auth.userCredential;
-        }
-        return null;
-      }
-
       const idToken = tokensObj.idToken;
       const providerMap = {
           google: GoogleAuthProvider,
@@ -400,18 +396,10 @@ async linkWithPopup(provider) {
  */
 async linkWithRedirect(provider) {
 
-    if (this.#auth.config.authType === "idcs") {
-      let err = new Error(getErrorMessage('METHOD_NOT_IMPLEMENTED'));
-      err.status = ErrorCode.NOT_IMPLEMENT;
-      throw authErrorHandler(err);
-    }
-
     if (
       !(provider instanceof GoogleAuthProvider ||
         provider instanceof FacebookAuthProvider ||
-        provider instanceof GithubAuthProvider ||
-        provider instanceof SAMLAuthProvider ||
-        provider instanceof OAuthProvider
+        provider instanceof GithubAuthProvider
       )) {
       let error = new Error(getErrorMessage('INVALID_PROVIDER'));
       error.status = 400;
@@ -427,13 +415,10 @@ async linkWithRedirect(provider) {
       localStorage.setItem("codeVerifier", codeVerifier);
       localStorage.setItem("providerId", provider.providerName);
 
-      // Build base URL safely
-      const baseUrl = `${this.#auth.app.options.ordsHost}_/baas-services/idm/onprem/${this.#auth.config.projectID}/socialidp`;
+      const authTypePath = this.#auth.app.options.authType === "idcs" ? "idcs" : "onprem";
+      const baseUrl = this.#auth.app.options.ordsHost + "_/baas-services/idm/" + authTypePath + "/" + this.#auth.config.projectID + "/socialidp";
 
-      // Create URL object (prevents string-based injection)
       const redirectUrl = new URL(baseUrl);
-
-      // Explicit allow-listed parameters only
       redirectUrl.searchParams.set('method', provider.providerName);
       redirectUrl.searchParams.set('device', 'web');
       redirectUrl.searchParams.set('apiKey', this.#auth.app.options.appID);
@@ -441,13 +426,12 @@ async linkWithRedirect(provider) {
       redirectUrl.searchParams.set('code_challenge_method', 'S256');
       redirectUrl.searchParams.set(
         'context_uri',
-        `${window.location.origin}${window.location.pathname}` // 🔐 no tainted query
+        window.location.origin + window.location.pathname
       );
       redirectUrl.searchParams.set('link', '1');
 
-      // Safe redirect sink (Fortify-recognized)
       window.location.assign(redirectUrl.toString());
-      return new Promise<never>(() => {});
+      return new Promise(() => {});
     }
     catch (err) {
       throw authErrorHandler(err);

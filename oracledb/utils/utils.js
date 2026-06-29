@@ -36,27 +36,45 @@ export const OracledbVersion = Object.freeze({
   });
 
 export function getHostString(ssl, host, token) {
+    let socketHost = String(host).trim().replace(/[?#].*$/, "");
+    socketHost = socketHost.endsWith("/")
+      ? socketHost.slice(0, socketHost.length - 1)
+      : socketHost;
+
+    const url = new URL(`${ssl ? "wss" : "ws"}://${socketHost}`);
     if (token && token != "") {
-        host = host.slice(0,host.length-1) + "?authToken=" + token;
+        url.searchParams.set("authToken", token);
     }
-    if (ssl) {
-      return "wss://" + host;
-    }
-    return "ws://" + host;
+    return url.toString();
 }
 
 export function getToken(app) {
-    return app.auth(app).currentUser
-        && app.auth(app).currentUser.__getToken ?
-        app.auth(app).currentUser.__getToken() : null;
+    const auth = app?.auth?.();
+    const user = auth?.currentUser;
+    return user && user.__getToken ? user.__getToken() : null;
 }
 
 
 
 export async function getAccessToken(app) {
-    return app.auth().currentUser
-        && app.auth().currentUser.getFUSABASEToken ?
-        await app.auth().currentUser.getFUSABASEToken() : null;
+    const auth = app?.auth?.();
+    const user = auth?.currentUser;
+    if (!user) {
+        return null;
+    }
+
+    if (user.getFUSABASEToken) {
+        try {
+            const token = await user.getFUSABASEToken();
+            if (token) {
+                return token;
+            }
+        } catch {
+            // Fall back to the regular auth token below.
+        }
+    }
+
+    return user.getIdToken ? await user.getIdToken() : null;
 }
 
 export function isInstanceOfAnyClass(variable) {

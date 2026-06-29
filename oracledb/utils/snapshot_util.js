@@ -26,7 +26,7 @@
 //
 
 import { Utils } from "./utils.js";
-import { attachAppCheckHeader } from '../../app/app-trust-header.js';
+import { attachAppTrustHeader } from '../../app/app-trust-header.js';
 import { fusabaseFetch } from "../../app/fusabase-fetch.js";
 
 export function createConnection(url) {
