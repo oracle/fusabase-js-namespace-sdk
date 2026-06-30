@@ -75,9 +75,6 @@ export class Auth {
         new URL(this.app.options.ordsHost).origin
       );
     }
-    // else if (this.config.authType === 'base_s' || this.config.authType === 'ldap_s') {
-    //   this.#authHelper = new ONPREMSRPAuthHelper(this.config, app.logLevel);
-    // }
     else {
       this.#authHelper = new ONPREMAuthHelper(
         this.config,
@@ -403,9 +400,6 @@ export class Auth {
     if (this.config.authType === 'idcs') {
       _userHelper = new IDCSUserHelper(this.config, null, tokens.access_token, this.app.logLevel);
     }
-    // else if (this.config.authType === 'base_s' || this.config.authType === 'ldap_s') {
-    //   _userHelper = new ONPREMSRPUserHelper(this.config, null, tokens.access_token, this.app.logLevel);
-    // }
     else {
       _userHelper = new ONPREMUserHelper(this.config, null, tokens.access_token, this.app.logLevel);
     }
