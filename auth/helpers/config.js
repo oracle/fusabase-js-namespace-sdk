@@ -51,16 +51,6 @@ export function getConfig(app) {
       projectConfig.idcsDomainURL || ""
     )
   }
-  // else if (projectConfig.authType === 'base_s'
-  //   || projectConfig.authType === 'ldap_s') {
-  //   return new ONPREMSRPConfig(
-  //     `${projectConfig.ordsHost}_/baas-services/idm/onprem/${projectConfig.projectID}/`,
-  //     projectConfig.appID,
-  //     projectConfig.authID,
-  //     projectConfig.authType,
-  //     projectConfig.projectID
-  //   )
-  // } 
   else {
     throw new Error(`Unsupported authType: ${projectConfig.authType}`);
   }

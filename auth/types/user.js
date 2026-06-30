@@ -79,9 +79,6 @@ export class User {
     if (this.#config.authType === 'idcs') {
       this.#userHelper = new IDCSUserHelper(auth.config, authnToken, acc_tok, auth._getLogLevel);
     }
-    // else if (this.#config.authType === 'base_s' || this.#config.authType === 'ldap_s') {
-    //   this.#userHelper = new ONPREMSRPUserHelper(auth.config, authnToken, acc_tok, auth._getLogLevel);
-    // }
     else {
       this.#userHelper = new ONPREMUserHelper(auth.config, authnToken, acc_tok, auth._getLogLevel);
     }
@@ -107,9 +104,6 @@ export class User {
         new URL(auth.app.options.ordsHost).origin
       );
     }
-    // else if (this.#config.authType === 'base_s' || this.#config.authType === 'ldap_s') {
-    //   this.#authHelper = new ONPREMSRPAuthHelper(auth.config, auth._getLogLevel);
-    // }
     else {
       this.#authHelper = new ONPREMAuthHelper(
         auth.config,

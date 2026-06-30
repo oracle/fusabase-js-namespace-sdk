@@ -34,7 +34,7 @@ const appInstance = fusabase.initializeApp({
   project_id: 'your-project-id',
   objs_type: 'dbfs',                // your objects type (e.g. 'dbfs')
   storage_bucket: 'your-bucket',
-  auth_type: 'base',                // base | ldap_s | base_s | idcs
+  auth_type: 'base',                // base | idcs
   auth_id: 'your-auth-id'
 }, '[DEFAULT]');
 
