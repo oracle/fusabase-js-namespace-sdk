@@ -33,6 +33,7 @@ import { TimestampUtils } from "../utils/timestamp.js";
 import { IdTokenResult } from "../types/idtoken.js"
 import { fusabaseFetch } from '../../app/fusabase-fetch.js';
 import { attachAppTrustHeader } from "../../app/app-trust-header.js";
+import { getAppStorageKey } from "../../app/storage-scope.js";
 
 /**
  * Internal helper class for authentication with IDCS.
@@ -109,42 +110,7 @@ export class IDCSAuthHelper {
   }
 
   async performSignOut(refresh_token) {
-    try {
-      await this.delegate.performSignOut(refresh_token);
-    } finally {
-      await this.signOutFromIDCS();
-    }
-  }
-
-  async signOutFromIDCS() {
-    let response = null;
-    const reqURL = this.config.idcsDomainURL + IDCSConfig.LOGOUT_REST_EP;
-    const params = {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/scim+json",
-      },
-    };
-
-    try {
-      response = await fusabaseFetch(this._app, reqURL, params);
-      Utils.checkResponse(response);
-    } catch (err) {
-      Utils.baasTrace(this.#logLevel, params, reqURL, response);
-      err.status = response ? response.status : 408;
-      err.authType = this.config.authType.toUpperCase();
-      if (response) {
-        try {
-          const newMessage = await response.json();
-          err.message = newMessage["detail"] || 'Unknown error';
-        } catch (jsonErr) {
-          err.message = 'Unknown';
-        }
-      } else {
-        err.message = 'Network error';
-      }
-      throw authErrorHandler(err);
-    }
+    await this.delegate.performSignOut(refresh_token);
   }
 
   async revokeRefreshToken(refresh_token) {
@@ -445,7 +411,7 @@ export class ONPREMAuthHelper {
 
     let response = null;
     let result = null;
-    const codeVerifier = localStorage.getItem("codeVerifier");
+    const codeVerifier = localStorage.getItem(getAppStorageKey(this._app, "codeVerifier"));
     const reqURL = `${this.config.domainURL}${ONPREMConfig.REDIRECT_RESULT_EP}?apiKey=${this.config.appID}`;
 
     const params = {
@@ -481,6 +447,7 @@ export class ONPREMAuthHelper {
 
     const result = {
       authnToken: null,
+      id_token: data.id_token,
       tokens: {
         access_token: new IdTokenResult(data.access_token),
         refresh_token: data.refresh_token
@@ -499,14 +466,16 @@ export class ONPREMAuthHelper {
     return new Promise((resolve, reject) => {
       const controller = new AbortController();
       let providerAuthToken = (event) => {
-        if (event.source != popupWindow)
+        if (event.source !== popupWindow) return;
+        if (event.origin !== this.ordsHostOrigin) return;
+        try {
+          const data = JSON.parse(event.data);
+          controller.abort(); //remove listener after getting response from Popup
+          resolve(data);
+        } catch (err) {
+          reject(err);
           return;
-        if (this.ordsHostOrigin && event.origin !== this.ordsHostOrigin)
-          return;
-        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
-        Utils.baasLogger(this.#logLevel, "Received auth popup message");
-        controller.abort(); //remove listener after getting response from Popup
-        resolve(data);
+        }
       }
       window.addEventListener("message",
         providerAuthToken,

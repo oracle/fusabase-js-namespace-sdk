@@ -41,6 +41,16 @@ import { OAuthProvider } from "./providers/oauth.js";
 import { SAMLAuthCredential } from "./types/credential.js";
 import { SAMLAuthProvider } from "./providers/saml.js";
 
+/**
+ * Public authentication APIs, providers, credential types, and persistence
+ * constants exposed by this module.
+ *
+ * @type {object}
+ * @example
+ * const auth = appInstance.auth();
+ * const result = await auth.signInWithEmailAndPassword('user@example.com', 'password');
+ * console.log(result.user.uid);
+ */
 var auth = {
   User: User,
   Auth: Auth,

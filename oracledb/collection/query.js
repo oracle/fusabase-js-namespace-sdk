@@ -38,6 +38,28 @@ import { extractCallbacksForSnapshot } from "../utils/snapshot_util.js";
 import { IdTokenResult } from "../../auth/types/idtoken.js";
 import { normalizeLongPollingOptions } from "../internal/settings.js";
 
+const MAX_LIKE_FILTER_LENGTH = 1024;
+
+function snapshotHash(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function snapshotVersionMarker(snapshot) {
+  const value = snapshot?._otherMetadata?.ASOF ?? snapshot?._otherMetadata?.VERSION ?? snapshot?.__version;
+  if (value == null || value === "") return null;
+  try {
+    return BigInt(String(value));
+  } catch {
+    const timestamp = Date.parse(String(value));
+    return Number.isNaN(timestamp) ? String(value) : timestamp;
+  }
+}
+
 function getLongPollingIntervalMs(db) {
   try {
     return normalizeLongPollingOptions(
@@ -168,6 +190,18 @@ export class Query {
     this._queryHelper = new QueryHelper(db.app);
     this._ops = [];
     this._vectorSearch = undefined;
+  }
+
+  // Realtime messages contain only the changed document, so these query
+  // shapes cannot be reconstructed correctly by a listener.
+  __validateSnapshotQuery() {
+    if (this._joins.length > 0 || this._aggregate.length > 0 || this._vectorSearch != null) {
+      const error = new Error(
+        "onSnapshot does not support joins, aggregates, or vector search queries."
+      );
+      error.status = 400;
+      throw oracledbErrorHandler(error);
+    }
   }
 
   /**
@@ -409,6 +443,12 @@ export class Query {
     opStr = opStr === "==" ? "=" : opStr;
     opStr = opStr === "is-null" ? "is NULL" : opStr;
     opStr = opStr === "not-in" ? "not in" : opStr;
+
+    if (opStr === "like" && String(fieldValue).length > MAX_LIKE_FILTER_LENGTH) {
+      let error = new Error(`LIKE filter values cannot exceed ${MAX_LIKE_FILTER_LENGTH} characters.`);
+      error.status = 400;
+      throw oracledbErrorHandler(error);
+    }
 
     if ((opStr==="in" || opStr === "not in") && !Array.isArray(fieldValue)) {
       fieldValue = [fieldValue];
@@ -863,6 +903,7 @@ export class Query {
       error.status = 400;
       throw oracledbErrorHandler(error);
     }
+    this.__validateSnapshotQuery();
     let unsubscribe;
 
     this._rt = 1;
@@ -889,46 +930,36 @@ export class Query {
     //for storing callbacks
     let _queryId = createUniqueName();
 
-    String.prototype.hashCode = function () {
-      var hash = 0,
-        i, chr;
-      if (this.length === 0) return hash;
-      for (i = 0; i < this.length; i++) {
-        chr = this.charCodeAt(i);
-        hash = ((hash << 5) - hash) + chr;
-        hash |= 0; // Convert to 32bit integer
-      }
-      return hash;
-    }
-
     const payload = {
+      path: this._path,
+      conditions: this._conditions
+    };
+    const subscriptionIdentity = {
+      type: this.type,
       path: this._path,
       conditions: this._conditions,
       explicitOrder: this._explicitOrder,
-      joins: this._joins,
-      access_token: access_token ? access_token.claims.sub : null
+      limit: this._limit,
+      column: this._column
     };
-
-    //for storing in indexed db
-    const mappedQueryId = Math.abs(JSON.stringify(payload).hashCode());
-
-    delete payload["access_token"];
-
-    //for websocket server and unified listening
-    const queryId = Math.abs(JSON.stringify(payload).hashCode());
+    const snapshotKey = JSON.stringify({
+      ...subscriptionIdentity,
+      access_token: access_token ? access_token.claims.sub : null
+    });
+    const queryId = snapshotHash(JSON.stringify(subscriptionIdentity));
 
     if (!this.oracledb._settings.experimentalAutoDetectLongPolling &&
       !this.oracledb._settings.experimentalForceLongPolling) {
 
-      //create connection
-      this.oracledb.__createSocket(access_token ? access_token.token : null, this.oracledb.app);
-
       const queryObject = {
         queryId: queryId,
         status: 1,
-        payload: payload,
-        TABLE_NAME: ""
+        payload: payload
       }
+
+      // Validate the complete, principal-aware snapshot identity on every
+      // registration, including duplicate query IDs.
+      this.oracledb.__registerSnapshotQuery(queryId, snapshotKey);
 
       //store callbacks and send message to web socket if not long polling
       if (!Utils.memberExists(this.oracledb.__snaps, queryId)) {
@@ -936,11 +967,12 @@ export class Query {
         Utils.baasLogger(this.oracledb.app.logLevel, "__sendMessage ", queryObject);
         this.oracledb.__sendMessage(queryObject);
       }
+      this.oracledb.__createSocket(access_token ? access_token.token : null, this.oracledb.app)
+        .catch(error => Utils.baasLogger(this.oracledb.app.logLevel, "Unable to establish realtime socket", error));
       this.oracledb.__snaps[queryId].push(_queryId);
       this.oracledb.__callbacks[_queryId] = callback;
-      this.oracledb.__queryIdMap[queryId] = mappedQueryId;
 
-      this.get().then(querySnap => {
+      this.get().then(async querySnap => {
         querySnap.docChanges = (options) => {
           let docsChanged = [];
           querySnap.docs.forEach((doc) => {
@@ -955,17 +987,14 @@ export class Query {
           return docsChanged;
         };
 
-        handleSnapshot(querySnap);
-
-        //store in indexed db here
-        this.oracledb.__setIndexDB({
-          queryId: mappedQueryId,
+        await this.oracledb.__setIndexDB({
+          queryId: snapshotKey,
           snap: querySnap,
           type: "collection",
           path: this._path.join("/")
-        }).then(() => {
-          Utils.baasLogger(this.oracledb.app.logLevel, "added to indexed db for query", mappedQueryId, queryId);
-        }).catch(e => Utils.baasLogger(this.oracledb.app.logLevel, e));
+        });
+        handleSnapshot(querySnap);
+        this.oracledb.__markInitialSnapshotReady(queryId);
 
       }).catch(e => {
         if (callback.error != null) {
@@ -989,8 +1018,8 @@ export class Query {
           }
 
           if (activeListeners.length === 0) {
-            delete this.oracledb.__queryIdMap[queryId];
             delete this.oracledb.__snaps[queryId];
+            this.oracledb.__unregisterSnapshotQuery(queryId);
             this.oracledb.__sendMessage({ queryId, status: 0, payload });
           }
         }
@@ -1033,9 +1062,14 @@ export class Query {
 
       })
         .catch(e => {
-          var querySnap = new QuerySnapshot([], this,
-            new SnapshotMetadata(false, false));
-          handleSnapshot(querySnap);
+          this.oracledb.__eventManager?.dispatchEvent?.(new Event("long polling error"));
+          if (callback.error != null) {
+            try {
+              callback.error(e);
+            } catch (ue) {
+              Utils.baasLogger(this.oracledb.app.logLevel, "Error in snapshot callback ", ue);
+            }
+          }
         });
 
       const db = this.oracledb;
@@ -1062,12 +1096,10 @@ export class Query {
               let oldIndexMap = {};
           
               for (let i = 0; i < querySnap._docs.length; i++) {
-                newVersionMap[querySnap._docs[i].id] = querySnap._docs[i]._otherMetadata["ASOF"] ?
-                 BigInt(querySnap._docs[i]._otherMetadata["ASOF"]) : querySnap._docs[i]._otherMetadata["VERSION"];
+                newVersionMap[querySnap._docs[i].id] = snapshotVersionMarker(querySnap._docs[i]);
               }
               for (let i = 0; i < oldQuerySnap._docs.length; i++) {
-                oldVersionMap[oldQuerySnap._docs[i].id] = oldQuerySnap._docs[i]._otherMetadata["ASOF"] ?
-                BigInt(oldQuerySnap._docs[i]._otherMetadata["ASOF"]) : oldQuerySnap._docs[i]._otherMetadata["VERSION"];
+                oldVersionMap[oldQuerySnap._docs[i].id] = snapshotVersionMarker(oldQuerySnap._docs[i]);
                 oldIndexMap[oldQuerySnap._docs[i].id] = i;
               }
 
@@ -1075,7 +1107,7 @@ export class Query {
               let docsChanged = [];
               for (let i = 0; i < querySnap._docs.length; i++) {
                 if (Object.prototype.hasOwnProperty.call(oldVersionMap,
-                  querySnap._docs[i].id) && newVersionMap[querySnap._docs[i].id] >
+                  querySnap._docs[i].id) && newVersionMap[querySnap._docs[i].id] !==
                   oldVersionMap[querySnap._docs[i].id]) {
                   docsChanged.push({
                     doc: querySnap._docs[i],
@@ -1122,7 +1154,17 @@ export class Query {
 
               oldQuerySnap = querySnap
 
-          }).catch(e => { Utils.baasLogger(db.app.logLevel, e) })
+          }).catch(e => {
+            db.__eventManager?.dispatchEvent?.(new Event("long polling error"));
+            Utils.baasLogger(db.app.logLevel, e);
+            if (callback.error != null) {
+              try {
+                callback.error(e);
+              } catch (ue) {
+                Utils.baasLogger(db.app.logLevel, "Error in snapshot callback ", ue);
+              }
+            }
+          })
         }
 
         let intervalId = setInterval(executeTask, pollingIntervalMs);

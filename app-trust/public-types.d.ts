@@ -28,62 +28,87 @@
 
 import type { App } from '../app/app.js';
 
-/** The token returned from an App Trust provider. */
+/**
+ * App Trust token data returned by an attestation exchange.
+ *
+ * @example
+ * const { token, expireTimeMillis } = await getToken(appTrust);
+ */
 export interface AppTrustToken {
+  /** Opaque token sent to eligible Fusabase endpoints. */
   token: string;
+  /** Time after which the SDK refreshes the cached token, in Unix milliseconds. */
   expireTimeMillis: number;
 }
 
-/** Result returned by getToken(). */
+/** Result returned by {@link getToken}. */
 export interface AppTrustTokenResult extends AppTrustToken {}
 
-/** A listener that is called whenever the App Trust token changes. */
+/** A listener called whenever App Trust obtains a new token. */
 export type AppTrustTokenListener = (token: AppTrustTokenResult) => void;
 
-export type Unsubscribe = () => void;
+/** Removes a registered listener and returns whether it was removed. */
+export type Unsubscribe = () => boolean;
 
+/** Options used to initialize App Trust. */
 export interface AppTrustOptions {
+  /** Provider used to obtain an attestation token in the browser. */
   provider: ReCaptchaV3Provider | ReCaptchaEnterpriseProvider | TurnstileProvider | HCaptchaProvider;
+  /** Reserved for compatibility; automatic refresh is not scheduled by this SDK. */
   isTokenAutoRefreshEnabled?: boolean;
-  /** Optional action passed to the attestation provider. Defaults to `baas-attest`. */
+  /** Reserved for compatibility; the current attestation action is always `attest`. */
   attestationAction?: string;
 }
 
-/** The App Trust service interface. */
+/** App Trust instance returned by {@link initializeAppTrust}. */
 export interface AppTrust {
+  /** Fusabase app that owns this instance. */
   readonly app: App;
 }
 
-/** Minimal app-like type accepted by this module. */
+/** Fusabase app type accepted by App Trust APIs. */
 export type FusabaseApp = App;
 
+/** Browser-only provider backed by Google reCAPTCHA v3. */
 export declare class ReCaptchaV3Provider {
+  /** reCAPTCHA v3 site key. */
   readonly siteKey: string;
+  /** @param siteKey reCAPTCHA v3 site key. */
   constructor(siteKey: string);
   /** @internal */
   _getAttestationToken(action: string): Promise<string>;
 }
 
+/** Browser-only provider backed by Google reCAPTCHA Enterprise. */
 export declare class ReCaptchaEnterpriseProvider {
+  /** reCAPTCHA Enterprise site key. */
   readonly siteKey: string;
+  /** @param siteKey reCAPTCHA Enterprise site key. */
   constructor(siteKey: string);
   /** @internal */
   _getAttestationToken(action: string): Promise<string>;
 }
 
+/** Browser-only provider backed by Cloudflare Turnstile. */
 export declare class TurnstileProvider {
+  /** Turnstile site key. */
   readonly siteKey: string;
+  /** Optional Turnstile action and customer data. */
   readonly options?: { action?: string; cData?: string };
+  /** @param siteKey Turnstile site key. @param options Optional provider options. */
   constructor(siteKey: string, options?: { action?: string; cData?: string });
   /** @internal */
   _getAttestationToken(action: string): Promise<string>;
 }
 
-/** @deprecated Use {@link TurnstileProvider}. */
+/** Backward-compatible alias. @deprecated Use {@link TurnstileProvider}. */
 export declare class CloudflareTurnstileProvider extends TurnstileProvider {}
 
+/** Browser-only provider backed by hCaptcha. */
 export declare class HCaptchaProvider {
+  /** hCaptcha site key. */
   readonly siteKey: string;
+  /** @param siteKey hCaptcha site key. */
   constructor(siteKey: string);
   /** @internal */
   _getAttestationToken(action: string): Promise<string>;

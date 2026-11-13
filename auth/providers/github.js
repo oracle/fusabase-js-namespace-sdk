@@ -32,6 +32,8 @@ import { authErrorHandler, ErrorCode } from "../errors.js";
 /**
  * Represents a GitHub authentication provider.
  * @extends AuthProvider
+ * @example
+ * const result = await auth.signInWithPopup(new GithubAuthProvider());
  */
 export class GithubAuthProvider extends AuthProvider {
   /**
@@ -55,6 +57,7 @@ export class GithubAuthProvider extends AuthProvider {
 
   /**
    * Creates a new GithubAuthProvider.
+   * @returns {GithubAuthProvider} The configured provider.
    */
   constructor() {
     super(GithubAuthProvider.PROVIDER_ID);
@@ -91,6 +94,8 @@ export class GithubAuthProvider extends AuthProvider {
    * @param {string} [accessToken] - The access token.
    * @returns {OAuthCredential} The created credential.
    * @throws {Error} If no token is provided or invalid arguments.
+   * @example
+   * const credential = GithubAuthProvider.credential(idToken, accessToken);
    */
   static credential(idToken, accessToken) {
     if (!accessToken && !idToken) {

@@ -43,29 +43,39 @@ import { EmailAuthProvider } from "../providers/email.js";
 import { OAuthCredential } from "./credential.js";
 import { User, UserCredential } from "./user.js";
 import { IDCSUserHelper, ONPREMUserHelper } from "../helpers/user_helper.js";
+import { getAppStorageKey, getAppStorageScope } from "../../app/storage-scope.js";
 
 
 /**
- * Auth Class for providing authentication
- * capabilities to the user.
+ * Authentication service for an initialized Fusabase application.
+ *
+ * @example
+ * const auth = appInstance.auth();
+ * const credential = await auth.signInWithEmailAndPassword('user@example.com', 'password');
  */
 export class Auth {
   #authHelper = null;
   #userCredential = null;
   #eventListener = null;
   #persistenceUserManager = null;
+  // Retained for the IDCS form-post logout handoff.
+  #idTokenHint = null;
   persistenceListener = null;
   static Persistence = persistenceType;
 
   /**
-   * Constructs the Auth instance.
-   * @param {App} app OBaaS App
+   * Creates the authentication service for an app. Applications normally
+   * create this service automatically; call `app.auth()` instead.
+   *
+   * @param {App} app - Initialized Fusabase app.
+   * @returns {Auth} The configured authentication service.
    */
   constructor(app) {
     this.config = getConfig(app);
     this.app = app;
     this.name = app.name;
-    this.TOKEN_KEY = this.app.options.appID + "TOKENS";
+    const persistenceScope = getAppStorageScope(app);
+    this.TOKEN_KEY = getAppStorageKey(app, "TOKENS");
     this.tenantId = null; // Find a way to get this (Best from config)
     this.currentUser = null;
     if (this.config.authType === 'idcs') {
@@ -87,27 +97,37 @@ export class Auth {
     this.#eventListener = new EventTarget();
 
     if (typeof window !== "undefined") {
-      this.persistenceListener = new window.BroadcastChannel(this.app.options.appID + "auth_event");
+      this.persistenceListener = new window.BroadcastChannel(`${persistenceScope}:auth_event`);
 
       this.#persistenceUserManager =
         new PersistenceUserManager(this.persistenceListener, this.TOKEN_KEY);
 
       /**
-       * Internal function to handle the login event with local persistence.
+       * Internal function to handle a local-persistence login notification.
+       * BroadcastChannel data is untrusted: tokens must be read from this
+       * app's scoped persistence rather than accepted from the message.
        */
-      const handleLocalLogin = async event => {
+      const handleLocalLogin = async () => {
+        const localPersistence = new BrowserLocalPersistence();
+        const serializedTokens = await localPersistence._get(this.TOKEN_KEY);
+        if (!serializedTokens) {
+          return;
+        }
+        let tokens;
+        try {
+          tokens = this.#tokensParse(serializedTokens);
+        } catch {
+          Utils.baasLogger(this.app.logLevel, "Ignoring invalid persisted auth tokens");
+          return;
+        }
+
         if (this.#persistenceUserManager.persistence.type === persistenceType.SESSION) {
           await this.#persistenceUserManager.persistence._remove(this.TOKEN_KEY);
         }
         if (this.currentUser) {
           await this.#signOutWithoutTrigger();
         }
-        this.#persistenceUserManager.persistence = new BrowserLocalPersistence();
-        var tokens = event.data.tokens;
-        if (!tokens) {
-          return;
-        }
-        tokens = this.#tokensParse(tokens);
+        this.#persistenceUserManager.persistence = localPersistence;
         await this.#signInWithoutTrigger(tokens);
       }
 
@@ -147,13 +167,13 @@ export class Auth {
         }
         else {
           this.#persistenceUserManager =
-            new PersistenceUserManager(this.persistenceListener, this.app.options.appID + "TOKENS");
+            new PersistenceUserManager(this.persistenceListener, this.TOKEN_KEY);
           this.#initialSignIn(tokens);
         }
       } else {
         //no tokens found
         this.#persistenceUserManager =
-          new PersistenceUserManager(this.persistenceListener, this.app.options.appID + "TOKENS");
+          new PersistenceUserManager(this.persistenceListener, this.TOKEN_KEY);
       }
 
       this.persistenceListener.onmessage = async event => {
@@ -161,14 +181,14 @@ export class Auth {
           title: "auth persistence event",
           name: event.data ? event.data.name : undefined,
         });
-        if (event.data.name === `login_local`) {
-          handleLocalLogin(event);
+        if (event.data?.name === `login_local`) {
+          handleLocalLogin();
         }
-        else if (event.data.name === `login_session_none` &&
+        else if (event.data?.name === `login_session_none` &&
           this.#persistenceUserManager.persistence.type === persistenceType.LOCAL) {
           handleSessionNoneLogin(event);
         }
-        else if (event.data.name === `logout_local` &&
+        else if (event.data?.name === `logout_local` &&
           this.#persistenceUserManager.persistence.type === persistenceType.LOCAL) {
           handleLocalLogout(event);
         }
@@ -187,15 +207,11 @@ export class Auth {
     return tokens;
   }
 
-  /**
-   * Internal function to stringify the tokens to store in storage.
-   * @param {Object} tokens - Tokens object.
-   * @returns {string} Stringified tokens.
-   */
-  #tokensStringify(tokens) {
-    tokens.access_token = tokens.access_token.stringify();
-    tokens = JSON.stringify(tokens);
-    return tokens;
+  #setIdTokenHint(tokens) {
+    this.#idTokenHint = this.config.authType === "idcs" &&
+      typeof tokens?.id_token === "string" && tokens.id_token.length > 0
+      ? tokens.id_token
+      : null;
   }
 
   /**
@@ -205,31 +221,40 @@ export class Auth {
    * @returns {Promise<Object>} Stored value.
    */
   _setTokenDataOnStorage = async (key, value) => {
-    const token = new IdTokenResult(value.access_token.token)
-    value.access_token = token;
-    const token_store = {
-      access_token: new IdTokenResult(value.access_token.token),
-      refresh_token: value.refresh_token,
-    };
-    this.#persistenceUserManager.persistence._set(key, value).then(res => {
-      var temp_token = token_store
-      temp_token = this.#tokensStringify(temp_token);
+    if (this.config.authType === "idcs" &&
+        (typeof value.id_token !== "string" || value.id_token.length === 0) &&
+        this.#persistenceUserManager) {
+      const persistedValue = await this.#persistenceUserManager.persistence._get(key);
+      let persistedTokens = null;
+      try {
+        persistedTokens = typeof persistedValue === "string"
+          ? JSON.parse(persistedValue)
+          : persistedValue;
+      } catch {
+        persistedTokens = null;
+      }
+      if (typeof persistedTokens?.id_token === "string" && persistedTokens.id_token.length > 0) {
+        value = { ...value, id_token: persistedTokens.id_token };
+      }
+    }
+    value.access_token = new IdTokenResult(value.access_token.token);
+    await this.#persistenceUserManager.persistence._set(key, value).then(res => {
       if (this.#persistenceUserManager.persistence.type === persistenceType.LOCAL) {
         this.persistenceListener.postMessage({
           name: `login_local`,
-          tokens: temp_token,
         });
       }
       else {
         this.persistenceListener.postMessage({
           name: `login_session_none`,
-          tokens: temp_token,
         });
       }
       return value;
     }).catch(err => {
       throw authErrorHandler(err);
     });
+    this.#setIdTokenHint(value);
+    return value;
   }
 
   /**
@@ -249,6 +274,9 @@ export class Auth {
    * @param {string} email - User's email.
    * @param {string} password - User's password.
    * @returns {Promise<UserCredential>} Created user's credentials.
+   *
+   * @example
+   * const result = await auth.createUserWithEmailAndPassword('user@example.com', 'password');
    */
   async createUserWithEmailAndPassword(email, password) {
     argCheck(email, "Invalid email", true, [typeStrings.STRING]);
@@ -288,6 +316,9 @@ export class Auth {
    * @param {string} email - User's email.
    * @param {string} password - User's password.
    * @returns {Promise<UserCredential>} User's Credential.
+   *
+   * @example
+   * const result = await auth.signInWithEmailAndPassword('user@example.com', 'password');
    */
   async signInWithEmailAndPassword(email, password) {
     argCheck(email, "Invalid email", true, [typeStrings.STRING]);
@@ -308,6 +339,9 @@ export class Auth {
    * @async
    * @param {Object} userData - User data.
    * @returns {Promise<UserCredential>} User credential.
+   *
+   * @example
+   * const result = await auth.signInWithPopup(new GoogleAuthProvider());
    */
   async #createCredentials(userData) {
     const user = new User(
@@ -343,6 +377,7 @@ export class Auth {
       Utils.baasTrace(this.app.logLevel);
       throw authErrorHandler(error);
     }
+    this.#setIdTokenHint(tokens);
     const userDetails = await this.#authHelper.getUserDetails(
       tokens.access_token
     );
@@ -369,7 +404,7 @@ export class Auth {
      } else if (userDetails["idp_name"].startsWith("saml_")) {
       credential = SAMLAuthProvider.credential(null, tokens.access_token.token);
      } else if (userDetails["idp_name"].startsWith("idcs")) {
-       credential = IDCSAuthProvider.credential(null, tokens.access_token.token);   
+       credential = IDCSAuthProvider.credential(tokens.id_token, tokens.access_token.token);
      }
     }
     //const credential = EmailAuthProvider.credential();
@@ -395,6 +430,7 @@ export class Auth {
     if (!tokens.access_token.token) {
       return null;
     }
+    this.#setIdTokenHint(tokens);
     tokens.access_token = new IdTokenResult(tokens.access_token.token);
     var _userHelper = null;
     if (this.config.authType === 'idcs') {
@@ -453,7 +489,7 @@ export class Auth {
      } else if (userDetails["idp_name"].startsWith("saml_")) {
       credential = SAMLAuthProvider.credential(null, tokens.access_token.token);
      } else if (userDetails["idp_name"].startsWith("idcs")) {
-       credential = IDCSAuthProvider.credential(null, token.access_token.token);   
+       credential = IDCSAuthProvider.credential(tokens.id_token, tokens.access_token.token);
      }
     }
     const userCred = new UserCredential(user, credential);
@@ -462,7 +498,8 @@ export class Auth {
       try {
         await this.#syncLoginPersistence({
           access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token
+          refresh_token: tokens.refresh_token,
+          id_token: tokens.id_token
         });
       } catch (e) {
         Utils.baasLogger(this.app.logLevel, "Unable to sync refreshed auth persistence");
@@ -513,6 +550,7 @@ export class Auth {
 
       const tokens = tokensObj.tokens;
       const authnToken = tokensObj.authnToken;
+      const idToken = this.config.authType === "idcs" ? tokensObj.id_token : undefined;
 
       const userDetails = await this.#authHelper.getUserDetails(
         tokens.access_token
@@ -526,16 +564,19 @@ export class Auth {
         this.app.auth()
       );
       await user.getFUSABASEToken();
-      const credential = provider.constructor.credential(
-        authnToken == null ? null : authnToken.token,
-        tokens.access_token.token
-      );
+      const credential = provider instanceof IDCSAuthProvider
+        ? IDCSAuthProvider.credential(idToken, tokens.access_token.token)
+        : provider.constructor.credential(
+            authnToken == null ? null : authnToken.token,
+            tokens.access_token.token
+          );
       const userCred = new UserCredential(user, credential);
       Utils.baasLogger(this.app.logLevel, { title: "usercreds", providerId: userCred.providerId });
       this.#userCredential = userCred;
       await this.#syncLoginPersistence({
         access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token
+        refresh_token: tokens.refresh_token,
+        id_token: idToken
       });
 
       await this.updateCurrentUser(user);
@@ -551,6 +592,10 @@ export class Auth {
    * @async
    * @param {OAuthCredential} credential - OAuth credential.
    * @returns {Promise<UserCredential>} User credential.
+   *
+   * @example
+   * const credential = GoogleAuthProvider.credential(idToken, accessToken);
+   * const result = await auth.signInWithCredential(credential);
    */
   async signInWithCredential(credential) {
     nullCheck(credential, "Invalid credential.");
@@ -594,12 +639,16 @@ export class Auth {
         tokens.access_token.token
       );
       }
+      if (credential.providerId === IDCSAuthProvider.PROVIDER_ID) {
+        newCreds = IDCSAuthProvider.credential(credential.idToken, tokens.access_token.token);
+      }
       const userCred = new UserCredential(user, newCreds);
       Utils.baasLogger(this.app.logLevel, { title: "usercreds", providerId: userCred.providerId });
       this.#userCredential = userCred;
       await this.#syncLoginPersistence({
         access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token
+        refresh_token: tokens.refresh_token,
+        id_token: credential.providerId === IDCSAuthProvider.PROVIDER_ID ? credential.idToken : undefined
       });
 
       await this.updateCurrentUser(user);
@@ -611,9 +660,14 @@ export class Auth {
   }
 
   /**
-   * Async method to sign in via redirect.
+   * Starts a browser redirect sign-in flow. This method does not resolve until
+   * the browser navigates away; call `getRedirectResult()` after it returns.
    * @async
    * @param {object} provider - Auth provider.
+   * @returns {Promise<void>} A promise for the redirect initiation.
+   *
+   * @example
+   * await auth.signInWithRedirect(new GoogleAuthProvider());
    */
   async signInWithRedirect(provider) {
 
@@ -641,9 +695,9 @@ export class Auth {
       const codeVerifier = this.#authHelper.generateCodeVerifier();
       const codeChallenge = await this.#authHelper.generateCodeChallenge(codeVerifier);
 
-      localStorage.setItem("redirectState", "LoginInitiated");
-      localStorage.setItem("codeVerifier", codeVerifier);
-      localStorage.setItem("providerId", provider.providerName);
+      localStorage.setItem(getAppStorageKey(this.app, "redirectState"), "LoginInitiated");
+      localStorage.setItem(getAppStorageKey(this.app, "codeVerifier"), codeVerifier);
+      localStorage.setItem(getAppStorageKey(this.app, "providerId"), provider.providerName);
 
       // Build base URL safely
       const baseUrl =
@@ -684,7 +738,7 @@ export class Auth {
    * @returns {object} Auth provider.
    */
   getProvider() {
-    const providerId = localStorage.getItem("providerId");
+    const providerId = localStorage.getItem(getAppStorageKey(this.app, "providerId"));
 
     if (providerId == "google") {
       return new GoogleAuthProvider();
@@ -711,14 +765,17 @@ export class Auth {
   }
 
   /**
-   * Gets the redirect result.
+   * Completes a pending redirect sign-in flow and clears redirect state.
    * @async
-   * @param {Auth} auth - Auth instance.
+   * @param {Auth} [auth] - Reserved for compatibility; this instance is used.
    * @returns {Promise<UserCredential|null>} Redirect result.
+   *
+   * @example
+   * const result = await auth.getRedirectResult();
    */
   async getRedirectResult(auth) {
 
-    const status = localStorage.getItem("redirectState");
+    const status = localStorage.getItem(getAppStorageKey(this.app, "redirectState"));
 
     if (status == null || status != "LoginInitiated")
       return null;
@@ -744,7 +801,8 @@ export class Auth {
         authnToken: null,
         tokens: {
           access_token: new IdTokenResult(data.access_token),
-          refresh_token: data.refresh_token
+          refresh_token: data.refresh_token,
+          id_token: this.config.authType === "idcs" ? data.id_token : undefined
         }
       }
       const tokens = tokensObj.tokens;
@@ -761,33 +819,36 @@ export class Auth {
         this.app.auth()
       );
       await user.getFUSABASEToken();
-      const credential = provider.constructor.credential(
-        authnToken == null ? null : authnToken.token,
-        tokens.access_token.token
-      );
+      const credential = provider instanceof IDCSAuthProvider
+        ? IDCSAuthProvider.credential(tokens.id_token, tokens.access_token.token)
+        : provider.constructor.credential(
+            authnToken == null ? null : authnToken.token,
+            tokens.access_token.token
+          );
       const userCred = new UserCredential(user, credential);
       Utils.baasLogger(this.app.logLevel, { title: "usercreds", providerId: userCred.providerId });
       this.#userCredential = userCred;
       await this.#syncLoginPersistence({
         access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token
+        refresh_token: tokens.refresh_token,
+        id_token: tokens.id_token
       });
 
-      localStorage.setItem("redirectState", "ResultProcessed");
+      localStorage.setItem(getAppStorageKey(this.app, "redirectState"), "ResultProcessed");
 
       await this.updateCurrentUser(user);
       return userCred;
     } catch (err) {
 
-      localStorage.setItem("redirectState", "ErrorEncountered");
+      localStorage.setItem(getAppStorageKey(this.app, "redirectState"), "ErrorEncountered");
       throw authErrorHandler(err);
     }
     finally {
 
       // Clear local storage in case of successful/failed login
-      localStorage.removeItem("redirectKey");
-      localStorage.removeItem("codeVerifier");
-      localStorage.removeItem("providerId");
+      localStorage.removeItem(getAppStorageKey(this.app, "redirectKey"));
+      localStorage.removeItem(getAppStorageKey(this.app, "codeVerifier"));
+      localStorage.removeItem(getAppStorageKey(this.app, "providerId"));
 
       // Clean the URL
       const url = new URL(window.location);
@@ -800,8 +861,11 @@ export class Auth {
 
   // check this (not implemented)
   /**
-   * Signs in anonymously.
-   * @returns {Promise<string>} Authentication resolved message.
+   * Attempts anonymous sign-in.
+   *
+   * @returns {Promise<string>} This method always rejects because anonymous
+   * sign-in is not implemented.
+   * @throws {AuthError} Always throws `auth/not-implemented`.
    */
   signInAnonymously() {
     let err = new Error(getErrorMessage('METHOD_NOT_IMPLEMENTED'));
@@ -814,8 +878,13 @@ export class Auth {
    * Detects the change in auth state and fires the provided
    * callback by passing the current user as a param.
    * Returns a function to unsubscribe from listening the state.
-   * @param {CallableFunction} observer - Observer function.
-   * @returns {CallableFunction} Unsubscribe function.
+   * @param {(user: User|null) => void} observer - Callback receiving the
+   * current user immediately and on later sign-in/sign-out changes.
+   * @returns {() => void} Function that removes the observer.
+   *
+   * @example
+   * const unsubscribe = auth.onAuthStateChanged((user) => console.log(user?.uid));
+   * unsubscribe();
    */
   onAuthStateChanged(observer) {
     argCheck(observer, "Invalid callback", true, [typeStrings.FUNCTION]);
@@ -837,24 +906,27 @@ export class Auth {
    * Adds an observer for changes to the signed-in user's ID token, 
    * which includes sign-in, sign-out, and token refresh events. 
    * Returns a function to unsubscribe from listening the state.
-   * @param {CallableFunction} observer - Observer function.
-   * @returns {CallableFunction} Unsubscribe function.
+   * @param {(user: User|null) => void} observer - Callback receiving the
+   * current user immediately and whenever its ID token changes.
+   * @returns {() => void} Function that removes the observer.
+   *
+   * @example
+   * const unsubscribe = auth.onIdTokenChanged((user) => console.log(user?.uid));
+   * unsubscribe();
    */
   onIdTokenChanged(observer) {
     argCheck(observer, "Invalid callback", true, [typeStrings.FUNCTION]);
     // Adding Listener
-    this.#eventListener.addEventListener("IdTokenChange", () => {
+    const listener = () => {
       observer(this.currentUser);
-    });
+    };
+    this.#eventListener.addEventListener("IdTokenChange", listener);
 
     // this.updateCurrentUser(this.currentUser);
     observer(this.currentUser);
     // Function to unsubscribe
     const unsubscribe = () => {
-      this.#eventListener.removeEventListener("IdTokenChange", () => {
-        observer(this.currentUser);
-
-      });
+      this.#eventListener.removeEventListener("IdTokenChange", listener);
     };
     return unsubscribe;
   }
@@ -866,42 +938,83 @@ export class Auth {
     if (this.persistenceListener == null || !(typeof window !== "undefined")) {
       return;
     }
-    this.#persistenceUserManager.persistence._remove(this.TOKEN_KEY).then(() => {
+    try {
+      await this.#persistenceUserManager.persistence._remove(this.TOKEN_KEY);
       if (this.#persistenceUserManager.persistence.type === persistenceType.LOCAL) {
         this.persistenceListener.postMessage({
           name: `logout_local`,
-          tokens: null,
         });
       }
-    }).catch(err => {
+    } catch (err) {
       throw authErrorHandler(err);
-    })
+    }
   }
 
   /**
-   * Async Method to sign out a logged in user.
-   * Throw exception if the calls to IDCS fails along
-   * with error status and code.
+   * Signs out the current user, clears local persistence and authenticated
+   * realtime state, and, for IDCS, submits the required browser logout handoff
+   * when an ID-token hint exists.
    * @async
    * @returns {Promise<void>}
+   *
+   * @example
+   * await auth.signOut();
    */
   async signOut() {
-    try {
-      await this.#authHelper.performSignOut(this.currentUser.refreshToken);
+    const idTokenHint = this.#idTokenHint;
+    const refreshToken = this.currentUser?.refreshToken ?? null;
+    const shouldSubmitIdcsLogout = this.config.authType === "idcs" &&
+      typeof window !== "undefined" && idTokenHint != null;
+
+    if (refreshToken && this.#authHelper) {
+      try {
+        await this.#authHelper.performSignOut(refreshToken);
+      } catch (err) {
+        if (!this.#isAlreadyInvalidRefreshTokenError(err)) {
+          throw authErrorHandler(err);
+        }
+      }
     }
-    catch (err) {
-    } 
     try {
       await this.#syncLogoutPersistence();
-    }
-    catch (err) {
-    }
-    try {
       await this.updateCurrentUser(null);
+      this.#idTokenHint = null;
+      if (shouldSubmitIdcsLogout) {
+        this.#submitIdcsLogoutForm(idTokenHint);
+      }
     }
     catch (err) {
       throw authErrorHandler(err);
     }
+  }
+
+  #isAlreadyInvalidRefreshTokenError(error) {
+    if (!error) return false;
+    if (error.status === ErrorCode.INVALID_USER_TOK) return true;
+    return typeof error.message === "string" &&
+      /\b(?:invalid[_ -]?token|token[_ -]?expired|expired[_ -]?token|already[_ -]?(?:revoked|invalid))\b/i.test(error.message);
+  }
+
+  #submitIdcsLogoutForm(idTokenHint) {
+    const logoutUrl = new URL("logout", this.config.domainURL);
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = logoutUrl.toString();
+    form.style.display = "none";
+    const fields = {
+      apiKey: this.app.options.appID,
+      context_uri: `${window.location.origin}${window.location.pathname}`,
+      id_token_hint: idTokenHint,
+    };
+    for (const [name, value] of Object.entries(fields)) {
+      const input = document.createElement("input");
+      input.type = "hidden";
+      input.name = name;
+      input.value = value;
+      form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
   }
 
   /**
@@ -911,6 +1024,7 @@ export class Auth {
   async #signOutWithoutTrigger() {
     try {
       await this.updateCurrentUser(null);
+      this.#idTokenHint = null;
     }
     catch (err) {
       throw authErrorHandler(err);
@@ -918,12 +1032,58 @@ export class Auth {
   }
 
   /**
+   * Clears realtime state owned by this app, if its OracleDB service exists.
+   * @returns {Promise<void>}
+   * @private
+   */
+  async #clearRealtimeState() {
+    const oracledb = this.app?.oracledb?.();
+    if (oracledb?.__clearRealtimeState) {
+      await oracledb.__clearRealtimeState();
+    }
+  }
+
+  /**
+   * Clears credential and user token data retained by this Auth instance after
+   * sign-out. The credential object is cleared before its Auth-held reference
+   * is removed so callers that retained the returned UserCredential observe
+   * empty OAuth or SAML token fields.
+   *
+   * @param {User|null} previousUser - The user being signed out.
+   * @returns {void}
+   * @private
+   */
+  #clearSignedOutCredential(previousUser) {
+    const userCredential = this.#userCredential;
+    const credential = userCredential?.credential;
+
+    if (credential != null) {
+      if (Object.prototype.hasOwnProperty.call(credential, "accessToken")) {
+        credential.accessToken = "";
+      }
+      if (Object.prototype.hasOwnProperty.call(credential, "idToken")) {
+        credential.idToken = "";
+      }
+    }
+
+    previousUser?.__clearTokenData?.();
+    if (userCredential != null) {
+      userCredential.user = null;
+    }
+    this.#userCredential = null;
+  }
+
+  /**
    * Async method to update the current user with the provided user.
-   * Also, triggers a change in state. Responsibility of the user to
-   * provide a valid User.
+   * Also triggers a change in state. If the principal changes, active
+   * realtime listeners and their authenticated socket are cleared before the
+   * new user is made current.
    * @async
-   * @param {User} user - User to update.
-   * @returns {Promise<User>} Updated current user.
+   * @param {User|null} user - User to make current, or `null` to sign out.
+   * @returns {Promise<User|null>} Updated current user.
+   *
+   * @example
+   * await auth.updateCurrentUser(null);
    */
   async updateCurrentUser(user) {
     if (user && !(user instanceof User)) {
@@ -931,8 +1091,17 @@ export class Auth {
       error.status = 400;
       throw authErrorHandler(error);
     }
+    const previousUser = this.currentUser;
+    if (previousUser?.uid !== user?.uid) {
+      await this.#clearRealtimeState();
+    }
     this.currentUser = user;
-    this.#userCredential.user = user;
+    if (this.#userCredential != null) {
+      this.#userCredential.user = user;
+    }
+    if (user == null) {
+      this.#clearSignedOutCredential(previousUser);
+    }
     setTimeout(() => {
       this.#eventListener.dispatchEvent(
         new Event("StateChange"),
@@ -952,6 +1121,9 @@ export class Auth {
    * @returns {Promise<User>} Updated user.
    */
   async __updateCurrentToken(user) {
+    if (this.currentUser?.uid !== user?.uid || this.#userCredential == null) {
+      return this.currentUser;
+    }
     this.currentUser = user;
     this.#userCredential.user = user;
     setTimeout(() => {
@@ -967,8 +1139,11 @@ export class Auth {
    * Async method to send password reset email.
    * @async
    * @param {string} email - Email address.
-   * @param {Object} actionCodeSettings - Settings.
+   * @param {Object} [actionCodeSettings] - Reserved action-code settings.
    * @returns {Promise<void>}
+   *
+   * @example
+   * await auth.sendPasswordResetEmail('user@example.com');
    */
   async sendPasswordResetEmail(email, actionCodeSettings) {
     argCheck(email, "Invalid email", true, [typeStrings.STRING]);
@@ -980,6 +1155,9 @@ export class Auth {
    * @async
    * @param {string} code - Reset code.
    * @returns {Promise<string>} Username.
+   *
+   * @example
+   * const username = await auth.verifyPasswordResetCode(resetCode);
    */
   async verifyPasswordResetCode(code) {
     argCheck(code, "Invalid code", true, [typeStrings.STRING]);
@@ -1007,6 +1185,9 @@ export class Auth {
    * @param {string} code - Reset code.
    * @param {string} newPassword - New password.
    * @returns {Promise<void>}
+   *
+   * @example
+   * await auth.confirmPasswordReset(resetCode, 'new-password');
    */
   async confirmPasswordReset(code, newPassword) {
     argCheck(code, "Invalid code", true, [typeStrings.STRING]);
@@ -1022,7 +1203,8 @@ export class Auth {
 
   /**
    * Getter for user credential.
-   * @returns {UserCredential} User credential.
+   * @returns {UserCredential|null} Most recent user credential, or `null`
+   * before sign-in and after sign-out.
    */
   get userCredential() {
     return this.#userCredential;
@@ -1031,8 +1213,12 @@ export class Auth {
   /**
    * Changes the persistence state.
    * @async
-   * @param {string} persistence - Persistence type.
+   * @param {'LOCAL'|'SESSION'|'NONE'} persistence - Persistence mode from
+   * `Auth.Persistence`.
    * @returns {Promise<void>}
+   *
+   * @example
+   * await auth.setPersistence(Auth.Persistence.LOCAL);
    */
   async setPersistence(persistence) {
     if (!(persistence == persistenceType.LOCAL ||

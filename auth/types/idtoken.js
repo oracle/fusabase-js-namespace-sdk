@@ -27,7 +27,11 @@ import { authErrorHandler } from "../errors.js";
 import { Utils } from "../utils/utils.js";
 
 /**
- * Class representing the token objects.
+ * Parsed authentication token with standard JWT claims.
+ *
+ * @example
+ * const tokenResult = new IdTokenResult(accessToken);
+ * console.log(tokenResult.claims.sub);
  */
 export class IdTokenResult {
   #token = "";
@@ -37,9 +41,15 @@ export class IdTokenResult {
   parsedJwt = null;
 
   /**
-   * Constructs the token.
-   * @param {string} token - The token string.
-   * @param {string} [provider='password'] - The sign-in provider.
+   * Creates a parsed token result.
+   *
+   * @param {string} token - Non-empty JWT access token.
+   * @param {string} [provider='password'] - Sign-in provider identifier.
+   * @returns {IdTokenResult} The parsed token result.
+   * @throws {AuthError} When `token` is empty.
+   *
+   * @example
+   * const tokenResult = new IdTokenResult(accessToken, 'google');
    */
   constructor(token, provider = 'password') {
     if (token.length === 0) {
@@ -80,8 +90,12 @@ export class IdTokenResult {
   }
 
   /**
-   * Getter for the token.
-   * @returns {string} The token if valid, empty string otherwise.
+   * Gets the token if it has not expired.
+   *
+   * @returns {string} The token, or an empty string after expiry.
+   *
+   * @example
+   * const token = tokenResult.token;
    */
   get token() {
     // check expiration time

@@ -30,6 +30,9 @@ import { authErrorHandler } from "../errors.js";
 /**
  * Represents an OAuth authentication provider.
  * @extends AuthProvider
+ * @example
+ * const provider = new OAuthProvider('oidc_example');
+ * const result = await auth.signInWithPopup(provider);
  */
 export class OAuthProvider extends AuthProvider {
 
@@ -42,7 +45,10 @@ export class OAuthProvider extends AuthProvider {
   /**
    * Creates a new OAuthProvider.
    * @param {string} providerId - The provider ID.
+   * @returns {OAuthProvider} The configured provider.
    * @throws {Error} If invalid providerId.
+   * @example
+   * const provider = new OAuthProvider('oidc_example');
    */
   constructor(providerId) {
     // Input Sanitation
@@ -68,6 +74,8 @@ export class OAuthProvider extends AuthProvider {
    * @param {string} [accessToken] - The access token.
    * @returns {OAuthCredential} The created credential.
    * @throws {Error} If invalid credentials.
+   * @example
+   * const credential = OAuthProvider.credential(idToken, accessToken);
    */
   static credential (idToken, accessToken) {
     if(typeof accessToken !== "string" )

@@ -31,7 +31,24 @@ function includesAppTrustHint(text) {
   return String(text ?? '').toLowerCase().includes('appcheck');
 }
 
-/** @internal */
+/**
+ * Executes a Fetch request, automatically attaching App Trust headers for
+ * eligible Fusabase endpoints. If an eligible request receives an App Trust
+ * 401 response, it refreshes the token once and retries the request.
+ *
+ * @param {object|undefined} app - The app that owns App Trust configuration.
+ * @param {string} url - Absolute URL to fetch.
+ * @param {RequestInit} [init] - Fetch options such as method, headers, and
+ * body.
+ * @returns {Promise<Response>} The initial response or the response from the
+ * single retry after token refresh.
+ *
+ * @example
+ * const response = await fusabaseFetch(appInstance, endpoint, {
+ *   method: 'GET',
+ * });
+ * @internal
+ */
 export async function fusabaseFetch(app, url, init) {
   const doFetch = (reqInit) => {
     return fetch(url, reqInit);
@@ -69,7 +86,7 @@ export async function fusabaseFetch(app, url, init) {
   try {
     await getToken(appTrustInstance, true);
   } catch {
-    // If refresh fails, return original 403.
+    // If refresh fails, return the original 401 response.
     return res;
   }
 

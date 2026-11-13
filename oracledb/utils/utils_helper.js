@@ -30,6 +30,25 @@ import { FieldValue } from "../field/value.js";
 import { oracledbErrorHandler, errorMessages, formatMessage } from "../errors.js";
 import { Timestamp } from "../types/timestamp.js";
 
+const UNSAFE_FIELD_PATH_SEGMENTS = new Set(["__proto__", "constructor", "prototype"]);
+
+function assertSafeFieldPath(pathArray) {
+  if (pathArray.some((segment) => UNSAFE_FIELD_PATH_SEGMENTS.has(segment))) {
+    const error = new Error(errorMessages.unsafeFieldPath);
+    error.status = 400;
+    throw oracledbErrorHandler(error);
+  }
+}
+
+function setOwnDataProperty(object, key, value) {
+  Object.defineProperty(object, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true
+  });
+}
+
 /**
  * Used to create a array of tokens defining path.
  *
@@ -127,7 +146,7 @@ function checkForFieldValue(obj, method) {
   return false;
 }
 
-function flattenUpdates(obj, prefix = "", result = {}) {
+function flattenUpdates(obj, prefix = "", result = Object.create(null)) {
   let hasKeys = false;
 
   for (let key in obj) {
@@ -144,23 +163,22 @@ function flattenUpdates(obj, prefix = "", result = {}) {
       !(value instanceof Timestamp) &&
       !Array.isArray(value)
     ) {
-      const beforeSize = Object.keys(result).length;
       flattenUpdates(value, path, result);
 
       // ✅ OBJECT WAS EMPTY → PRESERVE IT
       if (Object.keys(value).length === 0) {
-        result[path] = {};
+        setOwnDataProperty(result, path, {});
       }
 
     } else {
       // Primitive or FieldValue
-      result[path] = value;
+      setOwnDataProperty(result, path, value);
     }
   }
 
   // ✅ ROOT EMPTY OBJECT SUPPORT
   if (!hasKeys && prefix) {
-    result[prefix] = {};
+    setOwnDataProperty(result, prefix, {});
   }
 
   return result;
@@ -180,7 +198,7 @@ function updateNestedData(query, oldData, updates) {
   // Flatten nested updates first
   const flatUpdates = flattenUpdates(updates);
 
-  for (let key in flatUpdates) {
+  for (const key of Object.keys(flatUpdates)) {
     const value = flatUpdates[key];
 
     if (key.includes("$FieldPath$")) {
@@ -208,7 +226,7 @@ function setWholeData(query, oldData, updates, flag) {
 
   const flatUpdates = flattenUpdates(updates);
 
-  for (let key in flatUpdates) {
+  for (const key of Object.keys(flatUpdates)) {
     const value = flatUpdates[key];
 
     if (key.includes("$FieldPath$")) {
@@ -236,18 +254,21 @@ function setWholeData(query, oldData, updates, flag) {
  * @param {*} value - The value to set.
  */
 function setNestedValue(query, obj, oldData, pathArray, value, flag) {
+  assertSafeFieldPath(pathArray);
   let current = obj;
   let oldCurrent = oldData;
 
   for (let i = 0; i < pathArray.length - 1; i++) {
     const key = pathArray[i];
 
-    if (!(key in current) || typeof current[key] !== "object") {
-      current[key] = {};
+    if (!Object.prototype.hasOwnProperty.call(current, key) ||
+        typeof current[key] !== "object" || current[key] === null) {
+      setOwnDataProperty(current, key, {});
     }
 
-    if (!(key in oldCurrent) || typeof oldCurrent[key] !== "object") {
-      oldCurrent[key] = {};
+    if (!Object.prototype.hasOwnProperty.call(oldCurrent, key) ||
+        typeof oldCurrent[key] !== "object" || oldCurrent[key] === null) {
+      setOwnDataProperty(oldCurrent, key, {});
     }
 
     current = current[key];
@@ -255,7 +276,6 @@ function setNestedValue(query, obj, oldData, pathArray, value, flag) {
   }
 
   const finalKey = pathArray[pathArray.length - 1];
-  let existingValue = oldCurrent[finalKey];
   let sKey = finalKey;
   if (flag) {
     sKey = "";
@@ -274,11 +294,11 @@ function setNestedValue(query, obj, oldData, pathArray, value, flag) {
     if (flag && value.operation === "FieldValue:serverTimestamp") {
         query._serverTimestamp.push(sKey);
     } else {
-        current[finalKey] = updateUsingFieldValue(finalKey, oldCurrent, value);
+        setOwnDataProperty(current, finalKey, updateUsingFieldValue(finalKey, oldCurrent, value));
     }
     
   } else {
-    current[finalKey] = value;
+    setOwnDataProperty(current, finalKey, value);
   }
 }
 

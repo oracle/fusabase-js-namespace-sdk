@@ -32,6 +32,9 @@ import { authErrorHandler, ErrorCode } from "../errors.js";
 /**
  * Represents a Google authentication provider.
  * @extends AuthProvider
+ * @example
+ * const provider = new GoogleAuthProvider();
+ * const result = await auth.signInWithPopup(provider);
  */
 export class GoogleAuthProvider extends AuthProvider {
   /**
@@ -55,6 +58,7 @@ export class GoogleAuthProvider extends AuthProvider {
 
   /**
    * Creates a new GoogleAuthProvider.
+   * @returns {GoogleAuthProvider} The configured provider.
    */
   constructor() {
     super(GoogleAuthProvider.PROVIDER_ID);
@@ -91,6 +95,8 @@ export class GoogleAuthProvider extends AuthProvider {
    * @param {string} [accessToken] - The access token.
    * @returns {OAuthCredential} The created credential.
    * @throws {Error} If no token is provided or invalid arguments.
+   * @example
+   * const credential = GoogleAuthProvider.credential(idToken, accessToken);
    */
   static credential(idToken, accessToken) {
     if (!accessToken && !idToken) {

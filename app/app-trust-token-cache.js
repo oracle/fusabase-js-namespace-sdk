@@ -26,18 +26,46 @@
 
 const APP_TRUST_TOKEN_CACHE = new WeakMap();
 
-/** @internal */
+/**
+ * Gets the in-memory App Trust token cached for an app instance.
+ *
+ * @param {object|undefined} app - The app used as the cache key.
+ * @returns {string|undefined} The cached token, or `undefined` when absent.
+ *
+ * @example
+ * const token = getCachedAppTrustToken(appInstance);
+ * @internal
+ */
 export function getCachedAppTrustToken(app) {
   return app ? APP_TRUST_TOKEN_CACHE.get(app) : undefined;
 }
 
-/** @internal */
+/**
+ * Caches a non-empty App Trust token for an app instance.
+ *
+ * @param {object|undefined} app - The app used as the cache key.
+ * @param {string} token - The non-empty token to cache.
+ * @returns {void} This function does not return a value.
+ *
+ * @example
+ * setCachedAppTrustToken(appInstance, token);
+ * @internal
+ */
 export function setCachedAppTrustToken(app, token) {
   if (!app || typeof token !== "string" || !token) return;
   APP_TRUST_TOKEN_CACHE.set(app, token);
 }
 
-/** @internal */
+/**
+ * Removes the in-memory App Trust token for an app instance.
+ *
+ * @param {object|undefined} app - The app whose cached token is removed.
+ * @returns {void} This function does not return a value.
+ *
+ * @example
+ * clearCachedAppTrustToken(appInstance);
+ * @internal
+ */
 export function clearCachedAppTrustToken(app) {
   if (!app) return;
   APP_TRUST_TOKEN_CACHE.delete(app);

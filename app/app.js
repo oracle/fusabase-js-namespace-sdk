@@ -31,7 +31,14 @@ import LogLevel from "../logger.js";
 import fusabase from "../fusabase.js";
 
 /**
- * FusabaseError - Custom error class for fusabase applications.
+ * Error raised by the Fusabase SDK when an application-level operation fails.
+ *
+ * @example
+ * try {
+ *   throw new app.FusabaseError('invalid-config', 'projectID is required');
+ * } catch (error) {
+ *   console.log(error.code); // "app/invalid-config"
+ * }
  */
 class FusabaseError extends Error {
   /**
@@ -40,6 +47,11 @@ class FusabaseError extends Error {
    * @param {string} code - The error code.
    * @param {string} message - The error message.
    * @param {string} [stack] - The error stack.
+   * @returns {FusabaseError} The constructed SDK error.
+   *
+   * @example
+   * const error = new app.FusabaseError('not-found', 'App does not exist');
+   * console.log(error.code); // "app/not-found"
    */
   constructor(code, message, stack) {
     super(message);
@@ -50,12 +62,19 @@ class FusabaseError extends Error {
 }
 
 /**
- * App - The main application class for fusabase.
+ * A configured Fusabase application and the entry point for Auth, OracleDB,
+ * and Storage services. Applications are normally created with
+ * `fusabase.initializeApp()` rather than constructed directly.
+ *
+ * @example
+ * const appInstance = fusabase.initializeApp(options, 'my-app');
+ * const auth = appInstance.auth();
  */
 class App {
 
   /**
-   * @property {Object} options - Application options.
+   * @property {Object} options - The normalized application options supplied
+   * when the application was created.
    */
   options = null;
 
@@ -95,9 +114,14 @@ class App {
   #config = null;
 
   /**
-   * Gets the application configuration.
+   * Gets the normalized service configuration for this application.
    *
-   * @returns {Object} The configuration object.
+   * @returns {Object|null} The initialized configuration, or `null` before
+   * internal service initialization completes.
+   *
+   * @example
+   * const config = appInstance.config;
+   * console.log(config.storageBucket);
    */
   get config() {
     return this.#config
@@ -106,8 +130,13 @@ class App {
   /**
    * Creates a new `App` instance.
    *
-   * @param {Object} options - The options for the app.
-   * @param {string} name - The name of the app.
+   * @param {Object} options - Normalized SDK options, including service,
+   * project, authentication, and storage settings.
+   * @param {string} name - A unique name for this application instance.
+   * @returns {App} The constructed application instance.
+   *
+   * @example
+   * const appInstance = new app.App({ projectID: 'project-1' }, 'my-app');
    */
   constructor(options, name) {
     this.options = options;
@@ -115,28 +144,45 @@ class App {
   }
 
   /**
-   * Gets the authentication instance.
+   * Gets the authentication service associated with this application.
    *
-   * @returns {Auth} The authentication instance.
+   * @returns {Auth|null} The authentication instance, or `null` before the
+   * app is initialized.
+   *
+   * @example
+   * const auth = appInstance.auth();
+   * await auth.signInWithEmailAndPassword('user@example.com', 'password');
    */
   auth() {
     return this.#auth;
   }
 
   /**
-   * Gets the OracleDB instance.
+   * Gets the OracleDB service associated with this application.
    *
-   * @returns {Oracledb} The OracleDB instance.
+   * @returns {Oracledb|null} The OracleDB instance, or `null` before the app
+   * is initialized.
+   *
+   * @example
+   * const database = appInstance.oracledb();
+   * const snapshot = await database.collection('users').get();
    */
   oracledb() {
     return this.#oracledb;
   }
 
   /**
-   * Gets the storage instance.
+   * Gets the Storage service associated with this application. The optional
+   * URL is reserved for compatibility and is currently ignored.
    *
-   * @param {string} [url=""] - Optional URL for storage.
-   * @returns {Storage} The storage instance.
+   * @param {string} [url=""] - Reserved storage URL; it does not change the
+   * returned service.
+   * @returns {Storage|null} The Storage instance, or `null` before the app is
+   * initialized.
+   *
+   * @example
+   * const storage = appInstance.storage();
+   * const fileRef = storage.ref('images/logo.png');
    */
   // Ignoring input url for now..
   storage(url = "") {
@@ -144,9 +190,12 @@ class App {
   }
 
   /**
-   * Deletes the application instance.
+   * Releases service references and removes this app from the SDK app registry.
    *
-   * @returns {Promise<void>} A promise that resolves when deletion is complete.
+   * @returns {Promise<void>} A promise that resolves after the app is removed.
+   *
+   * @example
+   * await appInstance.delete();
    */
   async delete() {
     this.#auth = null;
@@ -156,18 +205,26 @@ class App {
   }
 
   /**
-   * Gets the current log level.
+   * Gets the current SDK log level.
    *
    * @returns {LogLevel} The log level.
+   *
+   * @example
+   * console.log(appInstance.logLevel); // "silent"
    */
   get logLevel() {
     return this.#logLevel;
   }
 
   /**
-   * Sets the log level.
+   * Sets the SDK log level for this application.
    *
-   * @param {LogLevel} log - The new log level.
+   * @param {LogLevel} log - The new level: `"silent"`, `"error"`, or
+   * `"debug"`.
+   * @returns {void} This setter does not return a value.
+   *
+   * @example
+   * appInstance.logLevel = app.LogLevel.DEBUG;
    */
   set logLevel(log) {
     this.#logLevel = log;
@@ -195,7 +252,13 @@ class App {
 }
 
 /**
- * The app module export.
+ * Public application APIs exposed by this module.
+ *
+ * @type {{App: typeof App, FusabaseError: typeof FusabaseError, LogLevel: Object}}
+ * @example
+ * import app from './app/app.js';
+ * const appInstance = fusabase.initializeApp(options);
+ * appInstance.logLevel = app.LogLevel.DEBUG;
  */
 var app = {
   App: App,

@@ -43,13 +43,12 @@ const errorMessages = {
   invalidStorageBucket: 'Invalid storage bucket',
   invalidAuthType: 'Invalid auth type',
   invalidAuthId: 'Invalid auth id',
-  invalidDomainUrl: 'Invalid domain url',
   invalidClientId: 'Invalid client id',
   invalidClientSecret: 'Invalid client secret',
   invalidSelfRegistrationProfile: 'Invalid self registration profile',
   invalidSocketValue: 'Invalid socket value',
   invalidPollingInterval: 'Invalid polling interval',
-  invalidOracledbVersion: 'Invalid oracledb version',
+  invalidBackendType: 'Only COLLECTION backend type is supported.',
   invalidChunkSize: 'Invalid chunk size',
   invalidMaxUploadBytes: 'Invalid max upload bytes',
   appNotInitialized: 'App is not initialized. Use initializeApp() first.',
@@ -70,10 +69,32 @@ function getConfiguredLongPollingInterval(options) {
   }
 }
 
+/**
+ * The Fusabase namespace. Use it to initialize apps and obtain their Auth,
+ * OracleDB, and Storage services.
+ *
+ * @example
+ * const app = fusabase.initializeApp({
+ *   ords_host: "https://example.com/ords/schema/",
+ *   schema: "schema",
+ *   app_id: "my-app",
+ *   project_id: "my-project",
+ *   objs_type: "dbfs",
+ *   storage_bucket: "my-bucket",
+ *   auth_type: "base",
+ *   auth_id: "my-auth-id"
+ * });
+ * const db = fusabase.oracledb(app);
+ */
 var fusabase = {
 
   _apps: {},
 
+  /**
+   * The registered app entries, keyed by their initialization name.
+   *
+   * @type {app.App[]}
+   */
   get apps() {
     var apps_arr = [];
     Object.entries(this._apps).map(entry => {
@@ -84,21 +105,78 @@ var fusabase = {
     return apps_arr;
   },
 
+  /**
+   * Initializes an application and registers it in the Fusabase namespace.
+   *
+   * The required connection, storage, and authentication settings are passed
+   * with their snake_case configuration keys. `e-idcs` is accepted as an alias
+   * for `idcs`; sockets are enabled unless `use_socket` is explicitly `false`.
+   *
+   * @param {{ords_host: string, schema: string, app_id: string, project_id: string,
+   * objs_type: string, backend_type: string, storage_bucket: string,
+   * auth_type: string, auth_id: string, app_type?: string, use_socket?: boolean,
+   * long_polling_interval?: number, upload_chunk_size?: number,
+   * max_upload_bytes?: number}} options_sdk - Application
+   * configuration.
+   * @param {string} options_sdk.ords_host - Base ORDS URL used to construct
+   * Fusabase service endpoints.
+   * @param {string} options_sdk.schema - Oracle schema that owns the Fusabase
+   * resources.
+   * @param {string} options_sdk.app_id - Fusabase application identifier.
+   * @param {string} options_sdk.project_id - Fusabase project identifier used
+   * in service routes.
+   * @param {string} options_sdk.objs_type - Storage implementation. `"dbfs"`
+   * selects DBFS; other values select OCI object storage.
+   * @param {string} options_sdk.backend_type - Backend data model. Only
+   * `"COLLECTION"` is supported; `"RELATIONAL"` is rejected.
+   * @param {string} options_sdk.storage_bucket - Bucket used by Storage APIs.
+   * @param {string} options_sdk.auth_type - Authentication backend: `"base"`,
+   * `"ldap"`, `"idcs"`, or `"e-idcs"` (`"e-idcs"` is normalized to `"idcs"`).
+   * @param {string} options_sdk.auth_id - Authentication-service identifier.
+   * @param {string} [options_sdk.app_type] - Optional client platform used when
+   * composing App Trust headers; it defaults to `"web"` where needed.
+   * @param {boolean} [options_sdk.use_socket=true] - Enables WebSocket
+   * transport for realtime listeners. Set to `false` to use long polling.
+   * @param {number} [options_sdk.long_polling_interval=29] - Long-polling
+   * timeout in seconds. Must be an integer from 5 through 300.
+   * @param {number} [options_sdk.upload_chunk_size=16777216] - Storage upload
+   * chunk size in bytes (16 MiB by default).
+   * @param {number} [options_sdk.max_upload_bytes=104857600] - Maximum upload
+   * size in bytes (100 MiB by default). Must be a positive safe integer.
+   * @param {string} [name="[DEFAULT]"] - App registration name. Only an app
+   * initialized with `"[DEFAULT]"` becomes the default app.
+   * @returns {app.App} The initialized application.
+   * @throws {app.FusabaseError} If a required setting is missing or has an
+   * invalid type or value.
+   * @example
+   * const app = fusabase.initializeApp({
+   *   ords_host: "https://example.com/ords/schema/",
+   *   schema: "schema", app_id: "web", project_id: "project",
+   *   objs_type: "dbfs", storage_bucket: "uploads",
+   *   auth_type: "base", auth_id: "auth-service",
+   *   use_socket: true, max_upload_bytes: 50 * 1024 * 1024
+   * }, "web-app");
+   */
   initializeApp: (options_sdk, name = "[DEFAULT]") => {
 argCheck(options_sdk["ords_host"], errorMessages.invalidOrdsHost, true, [typeStrings.STRING]);
 argCheck(options_sdk["schema"], errorMessages.invalidSchema, true, [typeStrings.STRING]);
 argCheck(options_sdk["app_id"], errorMessages.invalidAppId, true, [typeStrings.STRING]);
 argCheck(options_sdk["project_id"], errorMessages.invalidProjectId, true, [typeStrings.STRING]);
 argCheck(options_sdk["objs_type"], errorMessages.invalidObjsType, true, [typeStrings.STRING]);
+argCheck(options_sdk["backend_type"], errorMessages.invalidBackendType, true, [typeStrings.STRING]);
 argCheck(options_sdk["storage_bucket"], errorMessages.invalidStorageBucket, true, [typeStrings.STRING]);
 argCheck(options_sdk["auth_type"], errorMessages.invalidAuthType, true, [typeStrings.STRING]);
 argCheck(options_sdk["auth_id"], errorMessages.invalidAuthId, true, [typeStrings.STRING]);
-    if (String(options_sdk["auth_type"]).toLowerCase() === "idcs") {
-argCheck(options_sdk["idcs_domain_url"], errorMessages.invalidDomainUrl, true, [typeStrings.STRING]);
+    const authType = String(options_sdk["auth_type"]).toLowerCase();
+    const normalizedAuthType = authType === "e-idcs" ? "idcs" : authType;
+    const backendType = String(options_sdk["backend_type"]).toUpperCase();
+    if (backendType !== "COLLECTION") {
+      let error = new Error(errorMessages.invalidBackendType);
+      error.status = 400;
+      throw appErrorHandler(error);
     }
 argCheck(options_sdk["use_socket"], errorMessages.invalidSocketValue, false, [typeStrings.BOOL]);
 argCheck(options_sdk["long_polling_interval"], errorMessages.invalidPollingInterval, false, [typeStrings.INT]);
-argCheck(options_sdk["version"], errorMessages.invalidOracledbVersion, false, [typeStrings.INT]);
 argCheck(options_sdk["upload_chunk_size"], errorMessages.invalidChunkSize, false, [typeStrings.INT]);
 argCheck(options_sdk["max_upload_bytes"], errorMessages.invalidMaxUploadBytes, false, [typeStrings.INT]);
     if (
@@ -116,36 +194,57 @@ argCheck(options_sdk["max_upload_bytes"], errorMessages.invalidMaxUploadBytes, f
       appID: options_sdk["app_id"],
       projectID: options_sdk["project_id"],
       objsType: options_sdk["objs_type"].toLowerCase(),
+      backendType,
       storageBucket: options_sdk["storage_bucket"],
-      authType: options_sdk["auth_type"].toLowerCase(),
+      authType: normalizedAuthType,
       authID: options_sdk["auth_id"],
-      idcsDomainURL: options_sdk["idcs_domain_url"],
       appType: options_sdk["app_type"],
-      useSocket: options_sdk["use_socket"]==true ? options_sdk["use_socket"] : false,
+      useSocket: options_sdk["use_socket"] !== false,
       longPollingInterval,
-      useOracledbVersion:  options_sdk["version"] ? options_sdk["version"] : 2,
+      useOracledbVersion: 2,
       chunkSize: options_sdk["upload_chunk_size"] ? options_sdk["upload_chunk_size"] : 16*1024*1024,
       maxUploadBytes: options_sdk["max_upload_bytes"] != null ? options_sdk["max_upload_bytes"] : DEFAULT_MAX_UPLOAD_BYTES,
-      appTrustToken: options_sdk["appTrustToken"] ? options_sdk["appTrustToken"] : null,
     };
     var appInstance = new app.App(options, name);
 
     try {
-      appInstance._instanceId = getOrCreateBrowserInstanceId();
+      appInstance._instanceId = getOrCreateBrowserInstanceId(appInstance);
     } catch {
       // ignore
     }
 
     appInstance._intializeAfterConfig();
     fusabase._apps[name] = appInstance;
-    fusabase._apps["[DEFAULT]"] = appInstance;
+    if (name === "[DEFAULT]") {
+      fusabase._apps["[DEFAULT]"] = appInstance;
+    }
     return appInstance;
   },
 
+  /**
+   * Gets an initialized app by name.
+   *
+   * @param {string} [name="[DEFAULT]"] - The registered app name.
+   * @returns {app.App|undefined} The app, or `undefined` when no app has that
+   * name.
+   * @example
+   * const defaultApp = fusabase.app();
+   * const namedApp = fusabase.app("web-app");
+   */
   app: (name = "[DEFAULT]") => {
     return fusabase._apps[name];
   },
 
+  /**
+   * Gets an app's Storage service.
+   *
+   * @param {app.App} [app] - The app to use; the default app is used when
+   * omitted.
+   * @returns {Storage} The Storage service.
+   * @throws {app.FusabaseError} If the selected app has not been initialized.
+   * @example
+   * const storage = fusabase.storage();
+   */
   storage: (app) => {
     let app_ = app ? app : fusabase.app();
     if (app_ == null) {
@@ -157,6 +256,16 @@ argCheck(options_sdk["max_upload_bytes"], errorMessages.invalidMaxUploadBytes, f
     return app_.storage();
   },
 
+  /**
+   * Gets an app's authentication service.
+   *
+   * @param {app.App} [app] - The app to use; the default app is used when
+   * omitted.
+   * @returns {Auth} The authentication service.
+   * @throws {app.FusabaseError} If the selected app has not been initialized.
+   * @example
+   * const auth = fusabase.auth();
+   */
   auth: (app) => {
     let app_ = app ? app : fusabase.app();
 
@@ -169,6 +278,16 @@ argCheck(options_sdk["max_upload_bytes"], errorMessages.invalidMaxUploadBytes, f
     return app_.auth();
   },
 
+  /**
+   * Gets an app's OracleDB document-database service.
+   *
+   * @param {app.App} [app] - The app to use; the default app is used when
+   * omitted.
+   * @returns {Oracledb} The OracleDB service.
+   * @throws {app.FusabaseError} If the selected app has not been initialized.
+   * @example
+   * const db = fusabase.oracledb();
+   */
   oracledb: (app) => {
     let app_ = app ? app : fusabase.app();
     if (app_ == null) {
@@ -180,6 +299,16 @@ argCheck(options_sdk["max_upload_bytes"], errorMessages.invalidMaxUploadBytes, f
     return app_.oracledb();
   },
 
+  /**
+   * Sets the log level on every currently initialized app.
+   *
+   * Apps initialized after this call keep their own configured default level.
+   *
+   * @param {"error"|"silent"|"debug"} log - The level to set.
+   * @returns {void} Does not return a value.
+   * @example
+   * fusabase.setLogLevel("debug");
+   */
   setLogLevel(log) {
     for (const [key, instance] of Object.entries(this._apps)) {
       instance.logLevel = log;

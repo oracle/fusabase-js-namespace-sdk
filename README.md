@@ -1,8 +1,15 @@
-# Oracle® Backend for Firebase (Fusabase) JavaScript Namespace SDK
+<br />
+<h1 align="center">Fusabase JavaScript Namespace SDK</h1>
 
-A JavaScript SDK for Oracle Backend for Firebase (Fusabase) that provides authentication, document database, storage, App Trust, vector search, and UI component capabilities. Exposed as a namespaced default export with subpath modules.
+<p align="center">
+  <a href="https://docs.oracle.com/en/database/oracle/backend-for-firebase/26.3/index.html">Guides</a>
+  ·
+  <a href="https://livelabs.oracle.com/ords/r/dbpm/livelabs/view-workshop?wid=4404&amp;clear=180,RR&amp;session=117297029571778">Free Workshop</a>
+</p>
 
-This Oracle Backend for Firebase JavaScript SDK follows the Firebase design, API patterns, and rules-based authorization model. Its namespaced interface is designed to mirror the Firebase namespaced SDK interface so developers can move across backends with minimal changes. This Oracle Backend for Firebase JavaScript SDK is a distinct Oracle offering.
+A JavaScript Namespace SDK for Oracle Backend with Firebase APIs (Fusabase) that provides authentication, document database, storage, App Trust, vector search, and UI component capabilities. It is exposed as a namespaced default export with subpath modules.
+
+This Oracle Backend with Firebase APIs JavaScript Namespace SDK follows the Firebase design, API patterns, and rules-based authorization model. Its namespaced interface is designed to mirror the Firebase namespaced SDK interface so developers can move across backends with minimal changes. This JavaScript Namespace SDK is a distinct Oracle offering.
 
 ## Prerequisites
 
@@ -33,9 +40,16 @@ const appInstance = fusabase.initializeApp({
   app_id: 'your-app-id',
   project_id: 'your-project-id',
   objs_type: 'dbfs',                // your objects type (e.g. 'dbfs')
+  backend_type: 'COLLECTION',       // RELATIONAL is not supported
   storage_bucket: 'your-bucket',
-  auth_type: 'base',                // base | idcs
-  auth_id: 'your-auth-id'
+  auth_type: 'base',                // base | ldap | idcs | e-idcs (alias for idcs)
+  auth_id: 'your-auth-id',
+
+  // Optional transport and upload settings
+  use_socket: true,                 // defaults to true
+  long_polling_interval: 29,        // 5–300 seconds; used without sockets
+  upload_chunk_size: 16 * 1024 * 1024,
+  max_upload_bytes: 100 * 1024 * 1024
 }, '[DEFAULT]');
 
 // Set log level for all apps (use enum from subpath)
@@ -43,6 +57,50 @@ const appInstance = fusabase.initializeApp({
 // or
 // fusabase.setLogLevel(oradbMod.LogLevel.ERROR);
 ```
+
+Required initialization options are `ords_host`, `schema`, `app_id`,
+`project_id`, `objs_type`, `backend_type`, `storage_bucket`, `auth_type`, and
+`auth_id`.
+
+| Parameter | Required | Description |
+| --- | --- | --- |
+| `ords_host` | Yes | Base ORDS URL used to construct Fusabase service endpoints. |
+| `schema` | Yes | Oracle schema that owns the Fusabase resources. |
+| `app_id` | Yes | Fusabase application identifier. |
+| `project_id` | Yes | Fusabase project identifier used in service routes. |
+| `objs_type` | Yes | Storage implementation. Use `dbfs` for DBFS; other values select OCI object storage. |
+| `backend_type` | Yes | Backend data model. Specify `COLLECTION`; `RELATIONAL` is rejected because this SDK supports only the collection backend. |
+| `storage_bucket` | Yes | Bucket used by Storage APIs. |
+| `auth_type` | Yes | Authentication backend: `base`, `ldap`, `idcs`, or `e-idcs` (normalized to `idcs`). |
+| `auth_id` | Yes | Authentication-service identifier. |
+| `app_type` | No | Client platform used when composing App Trust headers; defaults to `web` where needed. |
+| `use_socket` | No | Enables WebSocket realtime transport. Defaults to `true`; set `false` to use long polling. |
+| `long_polling_interval` | No | Long-polling timeout in seconds. Integer from 5 through 300; defaults to 29. |
+| `upload_chunk_size` | No | Storage upload chunk size in bytes. Defaults to 16 MiB. |
+| `max_upload_bytes` | No | Maximum upload size in bytes. Must be a positive safe integer; defaults to 100 MiB. |
+| `name` | No | Second `initializeApp` argument that registers the app name. Defaults to `[DEFAULT]`; each initialized app also becomes the default app. |
+
+### Accessing Apps and Services
+
+`initializeApp()` returns the initialized app and makes it the default app. Get
+the default app with `fusabase.app()`, or a named app with
+`fusabase.app('web-app')`; a lookup returns `undefined` if no app has that
+name. The `fusabase.apps` array contains registered app entries. A named app is
+also registered as the default app, so that same instance can appear twice.
+
+```javascript
+const app = fusabase.app();
+const authService = fusabase.auth(app);
+const db = fusabase.oracledb(app);
+const storageService = fusabase.storage(app);
+
+// Applies to apps that have already been initialized.
+fusabase.setLogLevel('debug');
+```
+
+`fusabase.auth()`, `fusabase.oracledb()`, and `fusabase.storage()` use the
+default app when their argument is omitted. They throw if no selected app has
+been initialized.
 
 ### Authentication
 
@@ -243,6 +301,13 @@ ui.start('#auth-container', {
 });
 ```
 
+`AuthUI` accepts either the initialized app or its Auth service. The UI supports
+email/password, Google, Facebook, and GitHub controls. Add each control by
+including its provider `PROVIDER_ID` in `signInOptions`. On successful sign-in,
+`signInSuccessWithAuthResult` runs before navigation; return `false` from it to
+prevent the configured `signInSuccessUrl` redirect. Calling `start()` without
+options mounts the UI shell without provider controls.
+
 ## Documentation
 
 Generate TypeDoc documentation:
@@ -277,7 +342,7 @@ Runs the Mocha test suite in the `test/` directory.
 
 ## Trademarks
 
-Firebase is a trademark of Google LLC.  Use of the Firebase name here is solely to describe the design patterns and SDK interfaces that Oracle Backend for Firebase follows for developer familiarity and ease of migration; it does not imply any affiliation with or endorsement by Google.
+Firebase is a trademark of Google LLC.  Use of the Firebase name here is solely to describe the design patterns and SDK interfaces that Oracle Backend with Firebase APIs follows for developer familiarity and ease of migration; it does not imply any affiliation with or endorsement by Google.
 
 ## Contributing
 

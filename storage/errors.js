@@ -28,6 +28,8 @@
 /**
  * StorageErrorCode - Enum-like object containing storage error codes.
  * @enum {string}
+ * @example
+ * if (error.code === `storage/${StorageErrorCode.OBJECT_NOT_FOUND}`) return;
  */
 export const StorageErrorCode = Object.freeze({
   INVALID_ARGUMENT: 'invalid-argument',
@@ -43,9 +45,11 @@ export const StorageErrorCode = Object.freeze({
 });
 
 /**
- * Handles errors and converts them to StorageError instances.
- * @param {Error} err - The error to handle.
- * @returns {StorageError} A StorageError instance representing the handled error.
+ * Converts an error-like value to a `StorageError` from its HTTP status.
+ * @param {Error & {status?: number}} err - Error to normalize.
+ * @returns {StorageError} The normalized Storage error.
+ * @example
+ * throw storageErrorHandler(Object.assign(new Error('Not found'), { status: 404 }));
  */
 export function storageErrorHandler(err) {
   if (err instanceof StorageError) {
@@ -80,6 +84,8 @@ export function storageErrorHandler(err) {
 /**
  * StorageError - Class representing errors thrown by Fusabase Storage Service.
  * @extends Error
+ * @example
+ * const error = new StorageError('not-found', 'Object does not exist');
  */
 export class StorageError extends Error {
 
@@ -88,6 +94,7 @@ export class StorageError extends Error {
    * @param {string} code - The error code (without the 'storage/' prefix).
    * @param {string} message - The error message.
    * @param {string} [stack] - The stack trace.
+   * @returns {StorageError} The constructed error.
    */
   constructor(code, message, stack) {
     super(message);
@@ -101,17 +108,20 @@ export class StorageError extends Error {
 }
 
 /**
- * Formats a message template with arguments.
+ * Formats a Storage message template with numbered arguments.
  * @param {string} template - The message template with {0}, {1}, etc.
  * @param {...string} args - The arguments to insert.
  * @returns {string} The formatted message.
+ * @example
+ * formatMessage('Object {0} was not found', 'images/logo.png');
  */
 export function formatMessage(template, ...args) {
   return template.replace(/\{(\d+)\}/g, (m, i) => args[i] || m);
 }
 
 /**
- * Map of hardcoded error messages.
+ * Internal messages used for Storage input validation and request failures.
+ * @type {Readonly<Record<string, string>>}
  */
 export const StorageErrorMessages = {
   UNKNOWN: 'Unknown error occurred.',
