@@ -293,6 +293,9 @@ export class Utils {
                 key = key.substring(14);
                 key = parseInt(key);
             }
+            if (!Object.prototype.hasOwnProperty.call(object, key)) {
+                return undefined;
+            }
             object = object[key];
         }
         return object;

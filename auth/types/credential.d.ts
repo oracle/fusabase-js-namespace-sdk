@@ -45,7 +45,7 @@ export class AuthCredential {
    * (Needs a lookup)
    * @returns {string} JSON string of the credential.
    */
-  toJSON(): object;
+  toJSON(): string;
 
   /**
    * Method to convert the data in JSON format to data members.
@@ -74,7 +74,7 @@ export class OAuthCredential extends AuthCredential {
    * Method to convert the data member in a JSON format.
    * @returns {string} JSON string of the credential.
    */
-  toJSON(): object;
+  toJSON(): string;
 
   /**
    * Method to convert the data in JSON format to data members.
@@ -103,7 +103,7 @@ export class SAMLAuthCredential extends AuthCredential {
    * Method to convert the data member in a JSON format.
    * @returns {string} JSON string of the credential.
    */
-  toJSON(): object;
+  toJSON(): string;
 
   /**
    * Method to convert the data in JSON format to data members.

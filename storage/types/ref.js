@@ -49,7 +49,10 @@ function isDbfsStorage(storage) {
 }
 
 /**
- * Reference - Class representing a reference to a storage object.
+ * Address of an object or virtual directory in the configured storage bucket.
+ *
+ * @example
+ * const ref = storage.ref('images/logo.png');
  */
 export class Reference {
   /**
@@ -83,6 +86,7 @@ export class Reference {
    * @param {string} path - The path for the reference.
    * @param {Reference} [parent=null] - The parent reference.
    * @throws {StorageError} Throws an error if path is invalid.
+   * @returns {Reference} The constructed reference.
    */
   constructor(storage, path, parent = null) {
     // Check for invalid path
@@ -107,6 +111,8 @@ export class Reference {
    * Returns the bucket name.
    *
    * @returns {string} Bucket name.
+   * @example
+   * console.log(ref.bucket);
    */
   get bucket() {
     return this.storage.bucket;
@@ -117,6 +123,8 @@ export class Reference {
    * Returns the full path for the Reference.
    *
    * @returns {string} Full path.
+   * @example
+   * console.log(ref.fullPath); // "images/logo.png"
    */
   get fullPath() {
     if (this.name === "")
@@ -131,6 +139,8 @@ export class Reference {
    * @param {string} path - The child path.
    * @returns {Reference} The child reference.
    * @throws {StorageError} Throws an error if path is invalid.
+   * @example
+   * const thumbnail = ref.child('thumbnail.png');
    */
   child(path) {
     argCheck(path, StorageErrorMessages.INVALID_CHILD_PATH, true, [typeStrings.STRING]);
@@ -145,6 +155,8 @@ export class Reference {
    *
    * @returns {Promise<void>}
    * @throws {StorageError} Throws an error if deletion fails.
+   * @example
+   * await ref.delete();
    */
   async delete() {
     const access_token = await getAccessToken(this.storage.app);
@@ -159,6 +171,8 @@ export class Reference {
    * @param {Object} [options] - The list options.
    * @returns {Promise<ListResult>}
    * @throws {StorageError} Throws an error if listing fails or invalid options.
+   * @example
+   * const page = await storage.ref('images').list({ maxResults: 20 });
    */
   async list(options) {
     argCheck(options, StorageErrorMessages.INVALID_OPTIONS_OBJECT, false, [typeStrings.OBJECT]);
@@ -194,6 +208,8 @@ export class Reference {
    *
    * @returns {Promise<ListResult>}
    * @throws {StorageError} Throws an error if listing fails.
+   * @example
+   * const result = await storage.ref('images').listAll();
    */
   async listAll() {
     const access_token = await getAccessToken(this.storage.app);
@@ -230,6 +246,8 @@ export class Reference {
    * @param {UploadMetadata} [metadata] - The metadata.
    * @returns {UploadTask} Upload task instance.
    * @throws {StorageError} Throws an error if invalid data or metadata.
+   * @example
+   * const uploadTask = ref.put(file, { contentType: 'image/png' });
    */
   put(data, metadata = {"contentType":"application/octet-stream"}) {
     argCheck(metadata, StorageErrorMessages.INVALID_OPTIONS_OBJECT, false, [typeStrings.OBJECT]);
@@ -259,6 +277,8 @@ export class Reference {
    *
    * @returns {Promise<string>} Download URL.
    * @throws {StorageError} Throws an error if fetching URL fails.
+   * @example
+   * const url = await ref.getDownloadURL();
    */
   async getDownloadURL() {
     const access_token = await getAccessToken(this.storage.app);
@@ -282,6 +302,8 @@ export class Reference {
    *
    * @returns {Promise<FullMetadata>} Metadata object.
    * @throws {StorageError} Throws an error if fetching metadata fails.
+   * @example
+   * const metadata = await ref.getMetadata();
    */
   async getMetadata() {
     const access_token = await getAccessToken(this.storage.app);

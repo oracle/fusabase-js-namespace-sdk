@@ -32,6 +32,8 @@ import { authErrorHandler, ErrorCode } from "../errors.js";
 /**
  * Represents an IDCS authentication provider.
  * @extends AuthProvider
+ * @example
+ * const result = await auth.signInWithPopup(new IDCSAuthProvider());
  */
 export class IDCSAuthProvider extends AuthProvider {
   /**
@@ -55,6 +57,7 @@ export class IDCSAuthProvider extends AuthProvider {
 
   /**
    * Creates a new IDCSAuthProvider.
+   * @returns {IDCSAuthProvider} The configured provider.
    */
   constructor() {
     super(IDCSAuthProvider.PROVIDER_ID);
@@ -90,6 +93,8 @@ export class IDCSAuthProvider extends AuthProvider {
    * @param {string} [idToken] - The ID token.
    * @param {string} [accessToken] - The access token.
    * @returns {OAuthCredential} The created credential.
+   * @example
+   * const credential = IDCSAuthProvider.credential(idToken, accessToken);
    * @throws {Error} If no token is provided or invalid arguments.
    */
   static credential(idToken, accessToken) {

@@ -28,6 +28,7 @@ import { FusabaseAppTrustError } from './errors.js';
 import { fusabaseFetch } from '../app/fusabase-fetch.js';
 import { clearCachedAppTrustToken, setCachedAppTrustToken } from '../app/app-trust-token-cache.js';
 import { idbGetAppTrustToken, idbRemoveAppTrustToken, idbSetAppTrustToken } from './internal/indexeddb.js';
+import { getAppStorageKey } from '../app/storage-scope.js';
 import { HCaptchaProvider, ReCaptchaEnterpriseProvider } from './public-types.js';
 
 class AppTrustImpl {
@@ -104,9 +105,7 @@ function emit(state, token) {
 }
 
 function appTrustStorageKey(app) {
-  const projectId = String(app?.options?.projectID ?? '').trim();
-  const appId = String(app?.options?.appID ?? '').trim();
-  return `${projectId}:${appId}`;
+  return getAppStorageKey(app, "app_trust_token");
 }
 
 async function loadPersistedTokenIntoState(state) {
@@ -128,6 +127,22 @@ async function loadPersistedTokenIntoState(state) {
   setCachedAppTrustToken(state.app, tokenResult.token);
 }
 
+/**
+ * Initializes App Trust for one Fusabase application. An app can have only one
+ * App Trust instance; initialize it before requests that require attestation.
+ *
+ * @param {object|undefined} app - The initialized Fusabase application.
+ * @param {{provider: object}} options - Configuration containing an
+ * attestation provider.
+ * @returns {object} The App Trust instance used by the other App Trust APIs.
+ * @throws {FusabaseAppTrustError} When the app is missing, already configured,
+ * or the provider does not implement `_getAttestationToken`.
+ *
+ * @example
+ * const appTrust = initializeAppTrust(appInstance, {
+ *   provider: new ReCaptchaV3Provider('your-recaptcha-site-key'),
+ * });
+ */
 export function initializeAppTrust(app, options) {
   if (!app) throw new FusabaseAppTrustError('App is required', { status: 400, code: 'app-trust/no-app' });
   if (APP_TRUST_INSTANCE.has(app)) {
@@ -163,6 +178,25 @@ export function initializeAppTrust(app, options) {
   return instance;
 }
 
+/**
+ * Gets an App Trust token, using a valid cached token unless a refresh is
+ * requested. Concurrent refreshes share one attestation request.
+ *
+ * @param {object} appTrustInstance - The value returned by
+ * `initializeAppTrust`.
+ * @param {boolean} [forceRefresh=false] - Whether to bypass a valid cached
+ * token and request a new one.
+ * @returns {Promise<{token: string, expireTimeMillis: number}>} A token and
+ * its cache-expiry time in milliseconds since the Unix epoch.
+ * @throws {FusabaseAppTrustError} When the instance is invalid or attestation
+ * fails.
+ *
+ * @example
+ * const { token } = await getToken(appTrust);
+ *
+ * @example
+ * const refreshedToken = await getToken(appTrust, true);
+ */
 export async function getToken(appTrustInstance, forceRefresh = false) {
   const state = getState(appTrustInstance);
   if (!state) {
@@ -250,6 +284,35 @@ export async function getToken(appTrustInstance, forceRefresh = false) {
   return state.inFlight;
 }
 
+/**
+ * Registers a callback that runs whenever App Trust obtains a new token. If a
+ * token is already cached, the callback is scheduled with that token as well.
+ *
+ * @param {object} appTrustInstance - The value returned by
+ * `initializeAppTrust`.
+ * @param {((token: {token: string, expireTimeMillis: number}) => void)|{
+ * next?: Function, error?: Function, complete?: Function}} a - A next callback
+ * or observer object.
+ * @param {(error: Error) => void} [b] - Error callback when `a` is a function.
+ * @param {() => void} [c] - Completion callback when `a` is a function. It is
+ * accepted for API compatibility and is not called because token listeners do
+ * not complete automatically.
+ * @returns {() => boolean} A function that removes this listener and returns
+ * whether it was registered.
+ * @throws {FusabaseAppTrustError} When the App Trust instance is invalid.
+ *
+ * @example
+ * const unsubscribe = onTokenChanged(appTrust, (tokenResult) => {
+ *   console.log(tokenResult.token);
+ * });
+ * unsubscribe();
+ *
+ * @example
+ * const unsubscribe = onTokenChanged(appTrust, {
+ *   next: ({ token }) => console.log(token),
+ *   error: (error) => console.error(error),
+ * });
+ */
 export function onTokenChanged(appTrustInstance, a, b, c) {
   const state = getState(appTrustInstance);
   if (!state) {

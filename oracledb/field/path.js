@@ -26,11 +26,14 @@
 // 
 
 import { nullCheck } from "../utils/typecheck.js";
+import { oracledbErrorHandler } from "../errors.js";
 
 /**
- * FieldPath - It is used to refer to a field in a document. The path can
- * consist of one field name or can be a list of field names referring to
- * nested fields in the document.
+ * References a document field, including nested fields.
+ *
+ * @example
+ * const namePath = new FieldPath('profile', 'name');
+ * query.where(namePath, '==', 'Ada');
  */
 export class FieldPath {
 
@@ -44,7 +47,11 @@ export class FieldPath {
   /**
    * Creates a new `FieldPath` instance.
    *
-   * @param {Array} arr - Array of multiple path tokens.
+   * @param {...string} arr - One or more field-path segments.
+   * @returns {FieldPath} The constructed field path.
+   *
+   * @example
+   * const path = new FieldPath('address', 'city');
    */
   constructor(...arr) {
     nullCheck(arr, "Invalid argument passed");
@@ -63,10 +70,12 @@ export class FieldPath {
   }
 
   /**
-   * @property 
-   * Returns the path string pointing to the field.
+   * Gets the dotted path used in queries and field access.
    *
    * @returns {string} Path string.
+   *
+   * @example
+   * console.log(path.fullPath); // "address.city"
    */
   get fullPath() {
     return this.#fullPath;
@@ -74,12 +83,14 @@ export class FieldPath {
 
   /**
    * @property {Function} isEqual
-   * Checks whether this `FieldPath` is equal to the provided one.
-   * the specified path.
+   * Checks whether this path has the same field segments as another path.
    * 
-   * @param {FieldPath} fb FieldPath to compare to.
-   * @return {boolean} Returns true if both points to the same field.
-   * @throws {OracledbError} Throws an error if fb is not a FieldPath instance.
+   * @param {FieldPath} fp - Field path to compare.
+   * @returns {boolean} `true` when both paths are equal.
+   * @throws {OracledbError} When `fp` is not a `FieldPath`.
+   *
+   * @example
+   * new FieldPath('address', 'city').isEqual(new FieldPath('address', 'city'));
    */
   isEqual(fp) {
     if (!(fp instanceof FieldPath)) {
@@ -94,9 +105,12 @@ export class FieldPath {
 
   /**
    * @property {Function} toString
-   * Get the path string pointing to the field.
+   * Gets the encoded field-path representation used internally by the SDK.
    * 
-   * @return {string} Returns the path string.
+   * @returns {string} Encoded field-path representation.
+   *
+   * @example
+   * const encoded = new FieldPath('address', 'city').toString();
    */
   toString() {
     return this.fullPathSec;
@@ -107,8 +121,10 @@ export class FieldPath {
    * @property {Function} documentId
    * Creates a `FieldPath` instance for document ID.
    *
-   * @returns {FieldPath} A new `FieldPath` instance.
-   * time as the `Date` object.
+   * @returns {FieldPath} A path that refers to the document ID (`OID`).
+   *
+   * @example
+   * query.where(FieldPath.documentId(), '==', 'user-123');
    */
   static documentId() {
     const arr = [];

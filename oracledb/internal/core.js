@@ -42,6 +42,7 @@ import { SnapshotMetadata } from "../listener/snapshot.js";
 import { getSnapshotToken } from "../utils/snapshot_util.js";
 import { createConnection } from "../utils/snapshot_util.js";
 import { QuerySnapshot } from "../collection/snapshot.js";
+import { getAppStorageKey, getAppStorageScope } from "../../app/storage-scope.js";
 import {
   DEFAULT_LONG_POLLING_TIMEOUT_SECONDS,
   MAX_REALTIME_MESSAGE_QUEUE_BYTES,
@@ -50,6 +51,7 @@ import {
 } from "./settings.js";
 
 const DISALLOWED_REALTIME_SETTINGS = ["host", "ssl"];
+const MAX_LIKE_MATCH_LENGTH = 1024;
 
 function buildRealtimeEndpoint(ordsHost) {
   const [scheme, hostWithPath = ""] = ordsHost.split("://");
@@ -105,6 +107,165 @@ function createRealtimeSocketError(message) {
   return error;
 }
 
+function versionMarker(value) {
+  if (value == null || value === "") return null;
+  try {
+    return BigInt(String(value));
+  } catch {
+    const timestamp = Date.parse(String(value));
+    return Number.isNaN(timestamp) ? null : timestamp;
+  }
+}
+
+function isStaleRealtimeDocumentEvent(snapshot, incomingVersion) {
+  const currentVersion = snapshot?._otherMetadata?.VERSION ?? snapshot?.__version;
+  const currentMarker = versionMarker(currentVersion);
+  const incomingMarker = versionMarker(incomingVersion);
+  return currentMarker != null && incomingMarker != null &&
+    typeof currentMarker === typeof incomingMarker && incomingMarker < currentMarker;
+}
+
+function extractRealtimeChange(eventData) {
+  const rawChangedData = eventData.changedData;
+  const relationalData = rawChangedData?.DATA;
+  const sourceData = relationalData != null && typeof relationalData === "object"
+    ? relationalData
+    : rawChangedData ?? {};
+  const {
+    OID: dataOid,
+    _metadata: dataMetadata,
+    parent_oid: parentOid,
+    ...changedData
+  } = sourceData;
+  const metadata = dataMetadata ?? rawChangedData?._metadata ?? eventData._metadata ?? {};
+  const oid = dataOid ?? rawChangedData?.OID ?? metadata.OID ?? null;
+  return {
+    changedData,
+    oid,
+    metadata: {
+      version: metadata.VERSION ?? metadata.etag ?? null,
+      asOf: metadata.ASOF ?? metadata.asof ?? null,
+      lastModified: metadata.LAST_MODIFIED ?? null,
+      created: metadata.CREATED ?? null,
+      parentOid: metadata.PARENT_OID ?? parentOid ?? null
+    }
+  };
+}
+
+function getFieldValue(data, fieldPath) {
+  if (!data || !fieldPath) return undefined;
+  return fieldPath.split(".").reduce((value, key) =>
+    value != null && Object.prototype.hasOwnProperty.call(value, key) ? value[key] : undefined,
+  data);
+}
+
+/**
+ * Matches SQL-style LIKE wildcards without constructing a regular expression.
+ * `%` matches zero or more UTF-16 code units; `_` matches one code unit.
+ */
+function matchesLikePattern(pattern, actual) {
+  if (pattern.length > MAX_LIKE_MATCH_LENGTH || actual.length > MAX_LIKE_MATCH_LENGTH) {
+    return false;
+  }
+
+  let patternIndex = 0;
+  let actualIndex = 0;
+  let percentIndex = -1;
+  let percentMatchIndex = 0;
+
+  while (actualIndex < actual.length) {
+    if (patternIndex < pattern.length &&
+        (pattern[patternIndex] === "_" || pattern[patternIndex] === actual[actualIndex])) {
+      patternIndex += 1;
+      actualIndex += 1;
+    } else if (patternIndex < pattern.length && pattern[patternIndex] === "%") {
+      percentIndex = patternIndex;
+      patternIndex += 1;
+      percentMatchIndex = actualIndex;
+    } else if (percentIndex !== -1) {
+      patternIndex = percentIndex + 1;
+      percentMatchIndex += 1;
+      actualIndex = percentMatchIndex;
+    } else {
+      return false;
+    }
+  }
+
+  while (patternIndex < pattern.length && pattern[patternIndex] === "%") {
+    patternIndex += 1;
+  }
+  return patternIndex === pattern.length;
+}
+
+function matchesQueryFilters(data, conditions = []) {
+  return conditions.every(({ field, op, value }) => {
+    if (!field) return false;
+    const actual = getFieldValue(data, field);
+    switch (op) {
+      case "=": case "==": return actual === value;
+      case "!=": return actual !== value;
+      case "<": return actual < value;
+      case "<=": return actual <= value;
+      case ">": return actual > value;
+      case ">=": return actual >= value;
+      case "in": return Array.isArray(value) && value.includes(actual);
+      case "not in": case "not-in": return Array.isArray(value) && !value.includes(actual);
+      case "array-contains": return Array.isArray(actual) && actual.includes(value);
+      case "array-contains-any": return Array.isArray(actual) && Array.isArray(value) && value.some(item => actual.includes(item));
+      case "is NULL": case "is-null": return actual == null;
+      case "like": {
+        if (typeof actual !== "string") return false;
+        return matchesLikePattern(String(value), actual);
+      }
+      default: return false;
+    }
+  });
+}
+
+function compareQueryValues(left, right) {
+  if (left === right) return 0;
+  if (left == null) return -1;
+  if (right == null) return 1;
+  return left < right ? -1 : 1;
+}
+
+function applyQueryOrdering(docs, query) {
+  const orderedDocs = [...docs];
+  const explicitOrder = query?._explicitOrder ?? [];
+  if (explicitOrder.length > 0) {
+    orderedDocs.sort((left, right) => {
+      for (const { field, direction } of explicitOrder) {
+        const comparison = compareQueryValues(
+          getFieldValue(left._data, field),
+          getFieldValue(right._data, field)
+        );
+        if (comparison !== 0) return direction === "desc" ? -comparison : comparison;
+      }
+      return String(left.id).localeCompare(String(right.id));
+    });
+  }
+  return orderedDocs;
+}
+
+function querySnapshotChanges(previous, current) {
+  const key = doc => doc.ref?.path ?? doc.id;
+  const dataKey = doc => JSON.stringify(doc.data());
+  const previousByKey = new Map(previous.docs.map((doc, index) => [key(doc), { doc, index }]));
+  const currentByKey = new Map(current.docs.map((doc, index) => [key(doc), { doc, index }]));
+  const changes = [];
+  for (const [documentKey, entry] of previousByKey) {
+    if (!currentByKey.has(documentKey)) changes.push({ doc: entry.doc, type: "removed", oldIndex: entry.index, newIndex: -1 });
+  }
+  for (const [documentKey, entry] of currentByKey) {
+    const previousEntry = previousByKey.get(documentKey);
+    if (!previousEntry) changes.push({ doc: entry.doc, type: "added", oldIndex: -1, newIndex: entry.index });
+    else if (previousEntry.index !== entry.index || dataKey(previousEntry.doc) !== dataKey(entry.doc)) {
+      changes.push({ doc: entry.doc, type: "modified", oldIndex: previousEntry.index, newIndex: entry.index });
+    }
+  }
+  return changes;
+}
+
 /**
  * Oracledb - Represents a database instance.
  */
@@ -127,6 +288,19 @@ export class Oracledb {
   * (Private) web socket connection
   */
   #connection = null;
+
+  /**
+   * (Private) in-flight websocket creation shared by concurrent listeners.
+   */
+  #connectionPromise = null;
+
+  /**
+   * Increments whenever authenticated realtime state is discarded. Socket
+   * creation captures this value so a request started for a previous user
+   * cannot install a connection after sign-out.
+   * @private
+   */
+  #realtimeGeneration = 0;
 
   /**
   * @property 
@@ -174,6 +348,11 @@ export class Oracledb {
   * (Private) in-memory map of socket queryid to indexed db queryid
   */
   __queryIdMap = {};
+  __initialSnapshotReady = {};
+  __initialSnapshotEvents = {};
+  __initialSnapshotEventBytes = {};
+  __realtimeEventTails = {};
+  __realtimeProcessingEvents = new WeakSet();
 
   /**
    * Creates a new `Oracledb` instance.
@@ -182,8 +361,9 @@ export class Oracledb {
    * @param {App} app - fusabase app instance.
    */
   constructor(app) {
-    this.__listenerKey = "__fusabaseindexeddb__";
     this.app = app;
+    const storageScope = getAppStorageScope(app);
+    this.__listenerKey = getAppStorageKey(app, "indexeddb_listener_count");
     this.type = "oracledb";
     const realtimeEndpoint = buildRealtimeEndpoint(app.options.ordsHost ?? '');
     this.#realtimeHost = realtimeEndpoint.host;
@@ -201,10 +381,10 @@ export class Oracledb {
       experimentalLongPollingOptions: normalizeRuntimeLongPollingOptions(initialLongPollingOptions)
     };
     this.#conn = new DBConn(app);
-    this.#snapStore = new SnapshotStorage(this, app.options.appID +
-      "FUSABASE_SNAP_DB1", "SNAPS", "queryId");
-    this.#bundleStore = new BundleStore(app.options.appID +
-      "FUSABASE_BUNDLES", "BUNDLE_DOCS", "name");
+    this.#snapStore = new SnapshotStorage(this, `${storageScope}:SNAP_DB1`,
+      "SNAPS", "queryId");
+    this.#bundleStore = new BundleStore(`${storageScope}:BUNDLES`,
+      "BUNDLE_DOCS", "name");
 
     this.__eventManager = new EventTarget();
     if (this.__eventManager.addEventListener != null) {
@@ -342,14 +522,127 @@ export class Oracledb {
     this.__messageQueueBytes = 0;
   }
 
+  __registerSnapshotQuery(queryId, snapshotKey) {
+    const existing = this.__queryIdMap[queryId];
+    if (existing != null && existing !== snapshotKey) {
+      throw new Error("Snapshot query ID collision");
+    }
+    this.__queryIdMap[queryId] = snapshotKey;
+    if (!Object.prototype.hasOwnProperty.call(this.__snaps, queryId)) {
+      this.__initialSnapshotReady[queryId] = false;
+      this.__initialSnapshotEvents[queryId] = [];
+      this.__initialSnapshotEventBytes[queryId] = 0;
+    }
+  }
+
+  __markInitialSnapshotReady(queryId) {
+    if (!Object.prototype.hasOwnProperty.call(this.__snaps, queryId)) return;
+    this.__initialSnapshotReady[queryId] = true;
+    const events = this.__initialSnapshotEvents[queryId] ?? [];
+    delete this.__initialSnapshotEvents[queryId];
+    delete this.__initialSnapshotEventBytes[queryId];
+    for (const event of events) {
+      void this.#connection?.onmessage?.(event);
+    }
+  }
+
+  __unregisterSnapshotQuery(queryId) {
+    delete this.__queryIdMap[queryId];
+    delete this.__initialSnapshotReady[queryId];
+    delete this.__initialSnapshotEvents[queryId];
+    delete this.__initialSnapshotEventBytes[queryId];
+    delete this.__realtimeEventTails[queryId];
+  }
+
+  __clearInitialSnapshotEvents() {
+    this.__initialSnapshotReady = {};
+    this.__initialSnapshotEvents = {};
+    this.__initialSnapshotEventBytes = {};
+    this.__realtimeEventTails = {};
+    this.__realtimeProcessingEvents = new WeakSet();
+  }
+
+  __enqueueRealtimeEvent(queryId, event, processor) {
+    if (this.__realtimeProcessingEvents.has(event)) return processor();
+
+    this.__realtimeProcessingEvents.add(event);
+    const previous = this.__realtimeEventTails[queryId] ?? Promise.resolve();
+    const current = previous.catch(() => {}).then(processor);
+    this.__realtimeEventTails[queryId] = current;
+    return current.finally(() => {
+      this.__realtimeProcessingEvents.delete(event);
+      if (this.__realtimeEventTails[queryId] === current) {
+        delete this.__realtimeEventTails[queryId];
+      }
+    });
+  }
+
   __failRealtimeListeners(error) {
     const callbacks = Object.values(this.__callbacks);
     this.__clearMessageQueue();
+    this.__clearInitialSnapshotEvents();
     this.__snaps = {};
     this.__callbacks = {};
     this.__queryIdMap = {};
 
     for (const callback of callbacks) {
+      if (callback?.error) {
+        try {
+          callback.error(error);
+        } catch (ue) {
+          Utils.baasLogger(this.app.logLevel, "Error in snapshot callback", ue);
+        }
+      }
+    }
+  }
+
+  /**
+   * Discards all authenticated realtime state for the current app.
+   *
+   * This is called when Auth signs out. It closes the authenticated socket,
+   * fails active callbacks, drops queued messages and query mappings, and
+   * removes cached snapshots so a later user cannot inherit prior-user data.
+   *
+   * @param {Error} [error] - Error delivered to active listener error
+   * callbacks.
+   * @returns {Promise<void>} Resolves after local realtime state is cleared.
+   * @private
+   */
+  async __clearRealtimeState(
+    error = new Error("Realtime listeners were terminated because the user signed out.")
+  ) {
+    this.#realtimeGeneration += 1;
+    const socket = this.#connection;
+    this.#connection = null;
+    this.#connectionPromise = null;
+    this.__failRealtimeListeners(error);
+    this.__listening = 0;
+
+    if (socket != null) {
+      try {
+        socket.close();
+      } catch {
+        // Ignore close failures while clearing local realtime state.
+      }
+    }
+
+    if (this.#snapStore != null) {
+      try {
+        await this.#snapStore.deleteDB();
+      } catch (err) {
+        Utils.baasLogger(this.app.logLevel, "Unable to clear realtime snapshot cache", err);
+      }
+    }
+  }
+
+  __failRealtimeQuery(queryId, error) {
+    const listenerIds = this.__snaps[queryId] ?? [];
+    delete this.__snaps[queryId];
+    this.__unregisterSnapshotQuery(queryId);
+
+    for (const listenerId of listenerIds) {
+      const callback = this.__callbacks[listenerId];
+      delete this.__callbacks[listenerId];
       if (callback?.error) {
         try {
           callback.error(error);
@@ -416,44 +709,89 @@ export class Oracledb {
       return;
     }
 
-    const snapToken = await getSnapshotToken(`${this.app.options.ordsHost}_/baas-services/idm/onprem/${this.app.options.projectID}/authorizeSnapshot?apiKey=${this.app.options.appID}`, token, app);
-
-    this.#connection = createConnection(getHostString(this.#realtimeSsl, this.#realtimeHost, snapToken["access_token"]));
-
-    let __fireEvent = (event) => {
-      this.__eventManager.dispatchEvent(event);
+    if (this.#connectionPromise != null) {
+      return this.#connectionPromise;
     }
 
-    this.#connection.onopen = function (event) {
-      event.preventDefault();
-      __fireEvent(new Event("socket established"));
-    };
+    const connectionGeneration = this.#realtimeGeneration;
+    const connectionPromise = (async () => {
+      const snapToken = await getSnapshotToken(`${this.app.options.ordsHost}_/baas-services/idm/onprem/${this.app.options.projectID}/authorizeSnapshot?apiKey=${this.app.options.appID}`, token, app);
 
-    this.#connection.onerror = (error) => {
-      Utils.baasLogger(this.app.logLevel, "Realtime socket error", error);
-      this.__failRealtimeListeners(
-        createRealtimeSocketError("Realtime socket connection failed.")
-      );
-      try {
-        this.#connection?.close();
-      } catch {
-        // Ignore close errors after a failed websocket connection.
+      if (connectionGeneration !== this.#realtimeGeneration) {
+        return;
       }
-      this.#connection = null;
-    };
 
-    const oracleDB = this;
+      if (this.#connection != null && this.#connection.readyState !== WebSocket.CLOSED) {
+        return;
+      }
+
+      const socket = createConnection(getHostString(this.#realtimeSsl, this.#realtimeHost, snapToken["access_token"]));
+      if (connectionGeneration !== this.#realtimeGeneration) {
+        try {
+          socket.close();
+        } catch {
+          // Ignore close failures for a stale socket.
+        }
+        return;
+      }
+      this.#connection = socket;
+
+      let __fireEvent = (event) => {
+        this.__eventManager.dispatchEvent(event);
+      }
+
+      socket.onopen = function (event) {
+        event.preventDefault();
+        if (oracleDB.#connection !== socket) return;
+        __fireEvent(new Event("socket established"));
+      };
+
+      socket.onerror = (error) => {
+        if (this.#connection !== socket) return;
+        Utils.baasLogger(this.app.logLevel, "Realtime socket error", error);
+        this.__failRealtimeListeners(
+          createRealtimeSocketError("Realtime socket connection failed.")
+        );
+        try {
+          socket.close();
+        } catch {
+          // Ignore close errors after a failed websocket connection.
+        }
+        this.#connection = null;
+      };
+
+      const oracleDB = this;
 
     // adddoc {"changedData":{"name":"X","OID":"3DFC53CB5D260C74E0630C6846645653"},"operations":["INSERT"],"rowId":"AAASnuAABAAAAL+AAA","queryId":563653331}
     // setdoc {"changedData":{"name":"y","OID":"mydoc"},"operations":["UPDATE"],"rowId":"AAASnuAABAAAAL9AAA","queryId":563653331}
     // upddoc {"changedData":{"name":"y","OID":"3DFC53CB5D260C74E0630C6846645653"},"operations":["UPDATE"],"rowId":"AAASnuAABAAAAL+AAA","queryId":563653331}
-    this.#connection.onmessage = function (event) {
+    socket.onmessage = async function (event) {
+      if (oracleDB.#connection !== socket ||
+          connectionGeneration !== oracleDB.#realtimeGeneration) {
+        return;
+      }
       event.preventDefault();
-      Utils.baasLogger(oracleDB.app.logLevel, "event received!", event.data);
+      if (typeof event.data !== "string" ||
+          event.data.length > MAX_REALTIME_MESSAGE_QUEUE_BYTES) {
+        return;
+      }
+      const eventBytes = getMessageByteLength(event.data);
+      if (eventBytes > MAX_REALTIME_MESSAGE_QUEUE_BYTES) {
+        return;
+      }
       let eventData;
       try {
         eventData = JSON.parse(event.data);
       } catch (e) {
+        return;
+      }
+      Utils.baasLogger(oracleDB.app.logLevel, "event received!", event.data);
+
+      if (eventData?.error && eventData.queryId != null) {
+        oracleDB.__failRealtimeQuery(
+          eventData.queryId,
+          new Error(typeof eventData.error === "string" ? eventData.error : "Realtime listener error.")
+        );
         return;
       }
 
@@ -465,19 +803,52 @@ export class Oracledb {
 
       const queryId = eventData.queryId;
       const rowId = eventData.rowId;
-      let changedData = eventData.changedData;
-      let oid = eventData.changedData.OID;
+      const realtimeChange = extractRealtimeChange(eventData);
+      let changedData = realtimeChange.changedData;
+      let oid = realtimeChange.oid;
       const opr = eventData.operations;
-      delete changedData["OID"];
 
       //if we are not listening for this particular query then return
       if (!Object.prototype.hasOwnProperty.call(oracleDB.__snaps, queryId)) {
         return;
       }
 
+      // Do not let a realtime delta overtake the initial REST snapshot that
+      // establishes the listener's local state.
+      if (oracleDB.__initialSnapshotReady[queryId] === false) {
+        const events = oracleDB.__initialSnapshotEvents[queryId] ?? [];
+        const pendingBytes = oracleDB.__initialSnapshotEventBytes[queryId] ?? 0;
+        if (
+          events.length >= MAX_REALTIME_MESSAGE_QUEUE_COUNT ||
+          pendingBytes + eventBytes > MAX_REALTIME_MESSAGE_QUEUE_BYTES
+        ) {
+          oracleDB.__failRealtimeQuery(
+            queryId,
+            createRealtimeQueueError("Realtime initial snapshot event queue limit exceeded.")
+          );
+          return;
+        }
+        events.push(event);
+        oracleDB.__initialSnapshotEvents[queryId] = events;
+        oracleDB.__initialSnapshotEventBytes[queryId] = pendingBytes + eventBytes;
+        return;
+      }
+
+      // IndexedDB reads and writes are asynchronous. Process deltas for a
+      // subscription one at a time so a later message cannot overwrite an
+      // earlier message's snapshot update.
+      if (!oracleDB.__realtimeProcessingEvents.has(event)) {
+        return oracleDB.__enqueueRealtimeEvent(
+          queryId,
+          event,
+          () => oracleDB.#connection?.onmessage?.(event)
+        );
+      }
+
       const mappedQueryId = oracleDB.__queryIdMap[queryId];
 
-      oracleDB.__retrieveSnaps(mappedQueryId).then(resObj => {
+      try {
+      const resObj = await oracleDB.__retrieveSnaps(mappedQueryId);
       Utils.baasLogger(oracleDB.app.logLevel, "resObj from retrieve", resObj);
 
         if (resObj == null) {
@@ -487,6 +858,11 @@ export class Oracledb {
         //if type is document
         if (resObj.type === 'document') {
           Utils.baasLogger(oracleDB.app.logLevel, "doucment level run");
+          const listenedDocId = String(resObj.path ?? "").split("/").filter(Boolean).pop();
+          if ((oid && listenedDocId && oid !== listenedDocId) ||
+              (!oid && rowId && resObj.snap?.__rowId && resObj.snap.__rowId !== rowId)) {
+            return;
+          }
           let docR;
           if (resObj.snap.ref.type === "dualityviewdocument") {
             docR = oracleDB.dualityViewDoc(resObj.path);
@@ -494,13 +870,17 @@ export class Oracledb {
             docR = oracleDB.doc(resObj.path);
           }
 
+          if (isStaleRealtimeDocumentEvent(resObj.snap, realtimeChange.metadata.version)) {
+            return;
+          }
+
           if (opr[opr.length-1]=='DELETE') {
             changedData = resObj.snap._data;
           }
 
-          let ver = null;
-          let asof = null;
-          let lastmod = null;
+          let ver = realtimeChange.metadata.version;
+          let asof = realtimeChange.metadata.asOf;
+          let lastmod = realtimeChange.metadata.lastModified;
           if (changedData && changedData["_metadata"]) {
             ver = changedData["_metadata"]["etag"];
             asof = changedData["_metadata"]["asof"];
@@ -520,10 +900,10 @@ export class Oracledb {
           let docData = {
             "DOCUMENT": changedData,
             "LAST_MODIFIED": lastmod,
-            "CREATED": null,
+            "CREATED": realtimeChange.metadata.created,
             "SUBCOLLECTION": null,
             "ASOF": asof,
-            "PARENT_OID": null,
+            "PARENT_OID": realtimeChange.metadata.parentOid,
             "VERSION": ver,
             "ROWID": rowId
           }
@@ -542,9 +922,8 @@ export class Oracledb {
             }
           }
 
-          oracleDB.__setIndexDB(resObj).then(() => {
-            Utils.baasLogger(oracleDB.app.logLevel, "document set successful for onmessage");
-          }).catch(e => { Utils.baasLogger(oracleDB.app.logLevel, e); return; });
+          await oracleDB.__setIndexDB(resObj);
+          Utils.baasLogger(oracleDB.app.logLevel, "document set successful for onmessage");
 
           //end for document level
         } else {
@@ -554,6 +933,11 @@ export class Oracledb {
           let query;
           let ref = null;
           let oldSnap = resObj.snap;
+
+          const currentDocument = oldSnap._docs.find(doc => oid ? doc.id === oid : doc.__rowId === rowId);
+          if (currentDocument && isStaleRealtimeDocumentEvent(currentDocument, realtimeChange.metadata.version)) {
+            return;
+          }
 
           if (opr[opr.length-1]=='DELETE') {
             changedData = null;
@@ -576,10 +960,11 @@ export class Oracledb {
             query = oracleDB.collection(resObj.path);
             ref = query.doc(oid);
           }
-          let docChange = [];
-          let ver = null;
-          let asof = null;
-          let lastmod = null;
+          const operation = opr[opr.length - 1];
+          const oldIndex = oldSnap._docs.findIndex(doc => String(doc.id) === String(oid));
+          let ver = realtimeChange.metadata.version;
+          let asof = realtimeChange.metadata.asOf;
+          let lastmod = realtimeChange.metadata.lastModified;
           if (changedData && changedData["_metadata"]) {
             ver = changedData["_metadata"]["etag"];
             asof = changedData["_metadata"]["asof"];
@@ -599,54 +984,41 @@ export class Oracledb {
           let docData = {
             "DOCUMENT": changedData,
             "LAST_MODIFIED": lastmod,
-            "CREATED": null,
+            "CREATED": realtimeChange.metadata.created,
             "SUBCOLLECTION": null,
             "ASOF": asof,
-            "PARENT_OID": null,
+            "PARENT_OID": realtimeChange.metadata.parentOid,
             "VERSION": ver,
             "ROWID": rowId
           }
           
           let docSnap = new QueryDocumentSnapshot(docData, ref, new SnapshotMetadata(false, false));
 
-          let docSnaps = oldSnap._docs;
+          if (!oid) return;
 
-          let indexMap = {};
-          for (let i=0;i<docSnaps.length;i++) {
-            indexMap[docSnaps[i].id] = i;
-          }
+          const activeQuery = oldSnap.query ?? query;
 
-          for (let i=opr.length-1;i>=0;i--) {
-            if (opr[i] === "INSERT") {
+          let docSnaps = [...oldSnap._docs];
+          const existedInOldSnapshot = oldIndex >= 0;
+          const matchesQuery = operation !== "DELETE" &&
+            matchesQueryFilters(changedData, oldSnap.query?._conditions ?? []);
+
+          if (operation === "DELETE") {
+            if (!existedInOldSnapshot) return;
+            docSnaps.splice(oldIndex, 1);
+          } else if (!matchesQuery) {
+            if (!existedInOldSnapshot) return;
+            docSnaps.splice(oldIndex, 1);
+          } else if (operation === "INSERT" || !existedInOldSnapshot) {
               docSnaps.push(docSnap);
-              docChange.push({
-                doc: docSnap,
-                type: "added",
-                oldIndex: -1,
-                newIndex: docSnaps.length-1,
-              });
-            } else if (opr[i] === "UPDATE") {
-              docSnaps[indexMap[oid]] = docSnap;
-              docChange.push({
-                doc: docSnap,
-                type: "modified",
-                oldIndex: indexMap[oid],
-                newIndex: indexMap[oid],
-              });
-            } else if (opr[i] === "DELETE") {
-              docSnaps.splice(indexMap[oid],1);
-              docChange.push({
-                doc: docSnap,
-                type: "removed",
-                oldIndex: indexMap[oid],
-                newIndex: -1,
-              });
-            }
-            break;
+          } else if (operation === "UPDATE") {
+              docSnaps[oldIndex] = docSnap;
           }
-        
-          let querSnap = new QuerySnapshot(docSnaps, query, new SnapshotMetadata(false, false));
-          querSnap._docs = docSnaps;
+
+          docSnaps = applyQueryOrdering(docSnaps, activeQuery);
+          let querSnap = new QuerySnapshot(docSnaps, activeQuery, new SnapshotMetadata(false, false));
+          const docChange = querySnapshotChanges(oldSnap, querSnap);
+          if (docChange.length === 0) return;
 
           querSnap.docChanges = (options) => {
             return docChange;
@@ -670,15 +1042,26 @@ export class Oracledb {
           }
           
           Utils.baasLogger(oracleDB.app.logLevel, "query set on message", resObj);
-            oracleDB.__setIndexDB(resObj).then(() => {
-              Utils.baasLogger(oracleDB.app.logLevel, "query set successful for onmessage");
-            }).catch(e => { Utils.baasLogger(oracleDB.app.logLevel, e); return; });
+          await oracleDB.__setIndexDB(resObj);
+          Utils.baasLogger(oracleDB.app.logLevel, "query set successful for onmessage");
 
         }
 
         //end on message
-      }).catch(e => { Utils.baasLogger(oracleDB.app.logLevel, e); return; })
+      } catch (e) {
+        Utils.baasLogger(oracleDB.app.logLevel, e);
+      }
 
+      };
+    })();
+
+    this.#connectionPromise = connectionPromise;
+    try {
+      await connectionPromise;
+    } finally {
+      if (this.#connectionPromise === connectionPromise) {
+        this.#connectionPromise = null;
+      }
     }
   }
 

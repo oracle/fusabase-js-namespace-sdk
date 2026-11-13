@@ -34,9 +34,14 @@ import { GoogleAuthProvider } from "../providers/google.js";
 import { FacebookAuthProvider } from "../providers/facebook.js";
 import { GithubAuthProvider } from "../providers/github.js";
 import { EmailAuthCredential } from "../types/credential.js";
+import { getAppStorageKey } from "../../app/storage-scope.js";
 
 /**
- * Class representing the Users.
+ * Represents a signed-in Fusabase user.
+ *
+ * @example
+ * const user = auth.currentUser;
+ * console.log(user?.email);
  */
 export class User {
   displayName = null;
@@ -57,12 +62,15 @@ export class User {
   uid = null; // Needs a lookup
 
   /**
-   * Constructs the instance of a user.
-   * @param {Object} user - User details.
+   * Creates a user from authentication-service data. Users are normally
+   * obtained from `auth.currentUser` or `UserCredential.user`.
+   *
+   * @param {Object} user - Identity-provider user details.
    * @param {IdTokenResult} [authnToken=null] - Authentication token.
    * @param {IdTokenResult} acc_tok - Access token.
    * @param {string} refreshToken - Refresh token.
    * @param {Auth} auth - Auth instance.
+   * @returns {User} The constructed user.
    */
   constructor(user, authnToken = null, acc_tok, refreshToken, auth) {
     this.displayName = user.displayName;
@@ -116,8 +124,12 @@ export class User {
   }
 
   /**
-   * Converts user to JSON.
-   * @returns {string} JSON string of the user.
+   * Serializes safe user profile data to JSON.
+   *
+   * @returns {string} JSON representation of the user profile.
+   *
+   * @example
+   * const serialized = user.toJSON();
    */
   toJSON() {
     const user = {
@@ -150,7 +162,24 @@ export class User {
   }
 
   /**
-   * Method to get Id token for the authenticated user.
+   * Clears token material retained by this user instance after sign-out.
+   *
+   * @private
+   */
+  __clearTokenData() {
+    this.refreshToken = null;
+    const helpers = [this.#userHelper, this.#userHelper?.delegate];
+    for (const helper of helpers) {
+      if (helper != null) {
+        helper.access_token = null;
+        helper.fusabase_token = null;
+        helper.authnToken = null;
+      }
+    }
+  }
+
+  /**
+   * Gets the current ID token, refreshing it when needed or requested.
    * Optionally user can provide a param for force refreshing
    * the access token issued to the user.
    * Note: This function validates the access token first. If
@@ -164,6 +193,9 @@ export class User {
    * @async
    * @param {boolean} [forceRefresh=false] - Force refresh flag.
    * @returns {Promise<string>} JWT accessToken.
+   *
+   * @example
+   * const idToken = await user.getIdToken();
    */
   async getIdToken(forceRefresh = false) {
     if (this.#auth.currentUser && this.#auth.currentUser.email != this.email) {
@@ -197,6 +229,16 @@ export class User {
     return this.#userHelper.access_token.token;
   }
 
+  /**
+   * Gets the Fusabase service token for this user.
+   *
+   * @param {boolean} [forceRefresh=false] - Whether to request a new service token.
+   * @returns {Promise<string|null|undefined>} The service token, or no value
+   * when it cannot be obtained.
+   *
+   * @example
+   * const token = await user.getFUSABASEToken();
+   */
   async getFUSABASEToken(forceRefresh = false) {
     argCheck(forceRefresh, "Invalid value", true, [typeStrings.BOOL]);
     if (forceRefresh || !this.#userHelper.validateFUSABASEAccessToken()) {
@@ -229,6 +271,9 @@ export class User {
    * @async
    * @param {boolean} [forceRefresh=false] - Force refresh flag.
    * @returns {Promise<IdTokenResult>} Parsed IdTokenResult.
+   *
+   * @example
+   * const tokenResult = await user.getIdTokenResult();
    */
   async getIdTokenResult(forceRefresh = false) {
     argCheck(forceRefresh, "Invalid value", true, [typeStrings.BOOL]);
@@ -242,6 +287,9 @@ export class User {
    * @async
    * @param {{displayName: string, phoneNumber: string}} userProfile - User profile updates.
    * @returns {Promise<void>}
+   *
+   * @example
+   * await user.updateProfile({ displayName: 'Ada Lovelace', phoneNumber: '+15551234567' });
    */
   async updateProfile(userProfile) {
     argCheck(userProfile, "Invalid profile object", true, [typeStrings.OBJECT]);
@@ -252,9 +300,10 @@ export class User {
   }
 
   /**
-   * Method to delete the current signed in user and signOut the user.
+   * Deletes the current user.
    * @async
    * @returns {Promise<void>}
+   * @throws {AuthError} Always throws because account deletion is not implemented.
    */
   async delete() {
     let err = new Error(getErrorMessage('METHOD_NOT_IMPLEMENTED'));
@@ -267,6 +316,9 @@ export class User {
    * @async
    * @param {Object} settings - Settings.
    * @returns {Promise<void>}
+   *
+   * @example
+   * await user.sendEmailVerification();
    */
   async sendEmailVerification(settings) {
     await this.getIdToken();
@@ -277,6 +329,9 @@ export class User {
    * Refreshes the current user, if signed in.
    * @async
    * @returns {Promise<void>}
+   *
+   * @example
+   * await user.reload();
    */
   async reload() {
     try {
@@ -309,6 +364,9 @@ export class User {
    * @param {string} oldPassword - Old password.
    * @param {string} newPassword - New password.
    * @returns {Promise<void>}
+   *
+   * @example
+   * await user.updatePassword('old-password', 'new-password');
    */
   async updatePassword(oldPassword, newPassword) {
     argCheck(oldPassword, "Invalid old password", true, [typeStrings.STRING]);
@@ -329,6 +387,10 @@ export class User {
  * @async
  * @param {AuthCredential} credential - The auth credential to link with.
  * @returns {Promise<UserCredential>} A promise that resolves with the user credential.
+ *
+ * @example
+ * const credential = EmailAuthProvider.credential(user.email, 'password');
+ * await user.linkWithCredential(credential);
  */
 async linkWithCredential(credential) {
     if (credential instanceof EmailAuthCredential 
@@ -348,6 +410,9 @@ async linkWithCredential(credential) {
  * @async
  * @param {Object} provider - The auth provider instance (e.g., GoogleAuthProvider).
  * @returns {Promise<UserCredential>} A promise that resolves with the user credential or null.
+ *
+ * @example
+ * await user.linkWithPopup(new GoogleAuthProvider());
  */
 async linkWithPopup(provider) {
 
@@ -387,6 +452,9 @@ async linkWithPopup(provider) {
  * @async
  * @param {Object} provider - The auth provider instance (e.g., GoogleAuthProvider).
  * @returns {Promise<void>}
+ *
+ * @example
+ * await user.linkWithRedirect(new GoogleAuthProvider());
  */
 async linkWithRedirect(provider) {
 
@@ -405,9 +473,9 @@ async linkWithRedirect(provider) {
       const codeVerifier = this.#userHelper.generateCodeVerifier();
       const codeChallenge = await this.#userHelper.generateCodeChallenge(codeVerifier);
 
-      localStorage.setItem("redirectState", "LoginInitiated");
-      localStorage.setItem("codeVerifier", codeVerifier);
-      localStorage.setItem("providerId", provider.providerName);
+      localStorage.setItem(getAppStorageKey(this.#auth.app, "redirectState"), "LoginInitiated");
+      localStorage.setItem(getAppStorageKey(this.#auth.app, "codeVerifier"), codeVerifier);
+      localStorage.setItem(getAppStorageKey(this.#auth.app, "providerId"), provider.providerName);
 
       const authTypePath = this.#auth.app.options.authType === "idcs" ? "idcs" : "onprem";
       const baseUrl = this.#auth.app.options.ordsHost + "_/baas-services/idm/" + authTypePath + "/" + this.#auth.config.projectID + "/socialidp";
@@ -437,6 +505,9 @@ async linkWithRedirect(provider) {
  * @async
  * @param {string} providerId - The ID of the provider to unlink.
  * @returns {Promise<User>} The updated user object.
+ *
+ * @example
+ * await user.unlink('google');
  */
 async unlink(providerId) {
     this.#userHelper.user = this;
@@ -448,13 +519,18 @@ async unlink(providerId) {
 }
 
 /**
- * Class representing the User along with the Auth Credential.
+ * Result of a successful sign-in or credential-linking operation.
+ *
+ * @example
+ * const result = await auth.signInWithEmailAndPassword('user@example.com', 'password');
+ * console.log(result.user.uid, result.providerId);
  */
 export class UserCredential {
   /**
-   * Constructor to create an instance of the class.
+   * Creates a user credential result.
    * @param {User} user - User instance.
    * @param {AuthCredential} credential - Auth credential.
+   * @returns {UserCredential} The constructed result.
    */
   constructor(user, credential) {
     this.user = user;

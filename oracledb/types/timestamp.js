@@ -30,6 +30,10 @@ import { oracledbErrorHandler, errorMessages, formatMessage } from "../errors.js
 
 /**
  * Represents a point in time with seconds and nanoseconds precision.
+ *
+ * @example
+ * const timestamp = Timestamp.fromMillis(Date.now());
+ * console.log(timestamp.toDate());
  */
 export class Timestamp {
 
@@ -55,6 +59,10 @@ export class Timestamp {
    * (between 0 and 999,999,999).
    * @throws {OracledbError} Throws an error if the provided seconds or 
    * nanoseconds are out of range.
+   * @returns {Timestamp} The constructed timestamp.
+   *
+   * @example
+   * const timestamp = new Timestamp(1_700_000_000, 123_000_000);
    */
   constructor(seconds, nanoseconds) {
 
@@ -82,6 +90,8 @@ export class Timestamp {
    * Gets the seconds part of the timestamp.
    *
    * @returns {number} The number of seconds since the Unix epoch.
+   * @example
+   * console.log(timestamp.seconds);
    */
   get seconds() {
     return this.#seconds;
@@ -92,6 +102,8 @@ export class Timestamp {
    * Gets the nanoseconds part of the timestamp.
    *
    * @returns {number} The number of nanoseconds.
+   * @example
+   * console.log(timestamp.nanoseconds);
    */
   get nanoseconds() {
     return this.#nanoseconds;
@@ -102,6 +114,8 @@ export class Timestamp {
    * Converts the timestamp to a JavaScript `Date` object.
    *
    * @returns {Date} JavaScript `Date` object representing the same time.
+   * @example
+   * const date = timestamp.toDate();
    */
   toDate() {
     return new Date(this.seconds * 1000 + Math.floor(this.nanoseconds / 1e6));
@@ -115,6 +129,8 @@ export class Timestamp {
    * @returns {boolean} `true` if both timestamps are equal, `false` otherwise.
    * @throws {OracledbError} Throws an error if the provided object is not an instance 
    * of `Timestamp`.
+   * @example
+   * timestamp.isEqual(Timestamp.fromMillis(timestamp.toMillis()));
    */
   isEqual(other) {
     if (!(other instanceof Timestamp)) {
@@ -132,6 +148,8 @@ export class Timestamp {
    * Converts the `Timestamp` to milliseconds.
    *
    * @returns {number} The timestamp in milliseconds.
+   * @example
+   * console.log(timestamp.toMillis());
    */
   toMillis() {
     return this.seconds * 1000 + Math.floor(this.nanoseconds / 1e6);
@@ -143,6 +161,8 @@ export class Timestamp {
    *
    * @returns {string} A string representation of the timestamp in the 
    * format `seconds.nanoseconds`.
+   * @example
+   * console.log(timestamp.valueOf());
    */
   valueOf() {
     const secondsString = this.seconds.toString().padStart(11, '0');
@@ -159,6 +179,8 @@ export class Timestamp {
    * @returns {Timestamp} A new `Timestamp` instance representing the same 
    * time as the `Date` object.
    * @throws {OracledbError} Throws an error if an invalid date is provided.
+   * @example
+   * const timestamp = Timestamp.fromDate(new Date());
    */
   // static fromDate(date) {
   //   argCheck(date, "Invalid date passed", true, [typeStrings.DATE]);
@@ -191,6 +213,8 @@ export class Timestamp {
    * @param {number} milliseconds - Milliseconds since the Unix epoch.
    * @returns {Timestamp} `Timestamp` instance representing the given input.
    * @throws {OracledbError} Throws an error if an invalid value is provided.
+   * @example
+   * const timestamp = Timestamp.fromMillis(Date.now());
    */
   static fromMillis(milliseconds) {
     argCheck(milliseconds, "Invalid milliseconds passed", true,
@@ -206,6 +230,8 @@ export class Timestamp {
    * Returns the current time as a `Timestamp`.
    *
    * @returns {Timestamp} A `Timestamp` representing the current time.
+   * @example
+   * const timestamp = Timestamp.now();
    */
   static now() {
     const milliseconds = Date.now();
@@ -220,6 +246,8 @@ export class Timestamp {
    *
    * @returns {string} An ISO 8601 string representation of the `Timestamp` 
    * with microseconds precision.
+   * @example
+   * const text = timestamp.toTimestampString();
    */
   toTimestampString() {
     const date = new Date(this.#seconds * 1000);
@@ -238,6 +266,8 @@ export class Timestamp {
    * @returns {Timestamp} A `Timestamp` instance representing the time specified
    * by the string.
    * @throws {OracledbError} Throws an error if an invalid timestamp string is provided.
+   * @example
+   * const timestamp = Timestamp.fromTimestampString('2026-01-01T12:00:00.123456');
    */
   static fromTimestampString(str) {
     argCheck(str, "Invalid timestamp string passed", true,
@@ -275,6 +305,8 @@ export class Timestamp {
    *
    * @returns {string} A string representation of the `Timestamp`, formatted as
    *  an ISO 8601 string with microseconds.
+   * @example
+   * console.log(timestamp.toString());
    */
   toString() {
     return this.toTimestampString();

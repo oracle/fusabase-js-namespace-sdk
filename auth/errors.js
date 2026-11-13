@@ -25,7 +25,11 @@
 //-----------------------------------------------------------------------------
 
 /**
- * Internal Error Codes being used to generate AuthError
+ * Numeric status codes used internally when creating authentication errors.
+ *
+ * @type {Readonly<Record<string, number>>}
+ * @example
+ * if (error.status === ErrorCode.INVALID_USER_TOK) await auth.signOut();
  */
 export const ErrorCode = Object.freeze({
   INVALID_ARGS: 400,
@@ -41,7 +45,11 @@ export const ErrorCode = Object.freeze({
 });
 
 /**
- * Error code messages corresponding to ErrorCode values
+ * SDK error-code suffixes corresponding to authentication failures.
+ *
+ * @type {Readonly<Record<string, string>>}
+ * @example
+ * console.log(`auth/${ErrorCodeMessage.INVALID_ARGS}`);
  */
 export const ErrorCodeMessage = Object.freeze({
   INVALID_ARGS: 'argument-error',
@@ -58,7 +66,11 @@ export const ErrorCodeMessage = Object.freeze({
 });
 
 /**
- * Map of error message templates
+ * Message templates used to create authentication errors.
+ *
+ * @type {Readonly<Record<string, string>>}
+ * @example
+ * const message = getErrorMessage('INVALID_PARAM', 'email');
  */
 export const errorMessageTemplates = Object.freeze({
   INVALID_NULL: 'Invalid %s: value cannot be null or undefined',
@@ -94,10 +106,15 @@ export const errorMessageTemplates = Object.freeze({
 });
 
 /**
- * Function to get formatted error message from template
- * @param {string} key - The key in errorMessageTemplates
- * @param {...string} args - Arguments to replace %s placeholders
- * @returns {string} Formatted message
+ * Formats a message template with the supplied replacement values.
+ *
+ * @param {string} key - Key from `errorMessageTemplates`.
+ * @param {...string} args - Values substituted into `%s` placeholders.
+ * @returns {string} The formatted message.
+ * @throws {Error} When `key` is not a known template.
+ *
+ * @example
+ * getErrorMessage('INVALID_PARAM', 'email'); // "Invalid email"
  */
 export function getErrorMessage(key, ...args) {
   let template = errorMessageTemplates[key];
@@ -108,15 +125,26 @@ export function getErrorMessage(key, ...args) {
 }
 
 /**
- * Custom error class for authentication-related errors.
- * @class
+ * Error raised by an authentication API after normalizing an underlying error.
+ *
  * @extends Error
+ * @example
+ * try {
+ *   await auth.signInWithEmailAndPassword('user@example.com', 'bad-password');
+ * } catch (error) {
+ *   if (error instanceof AuthError) console.log(error.code);
+ * }
  */
 export class AuthError extends Error {
   /**
-   * Creates an instance of AuthError.
-   * @param {string} code - The error code prefixed with 'auth/'.
-   * @param {Error} error - The original error object.
+   * Creates an authentication error.
+   *
+   * @param {string} code - SDK error-code suffix; the constructor adds `auth/`.
+   * @param {Error} error - The underlying error.
+   * @returns {AuthError} The constructed error.
+   *
+   * @example
+   * const error = new AuthError('network-error', new Error('Request failed'));
    */
   constructor(code, error) {
     super(error.message);
@@ -129,9 +157,14 @@ export class AuthError extends Error {
 }
 
 /**
- * Handles and transforms errors into AuthError instances based on status codes.
- * @param {Error|Object} err - The error object to handle, expected to have a status property.
- * @returns {AuthError} An AuthError instance with the appropriate code.
+ * Converts an SDK or transport error to an `AuthError` using its status code.
+ *
+ * @param {Error|Object} err - Error-like object that may contain `status` and
+ * `authType` properties.
+ * @returns {AuthError} The normalized authentication error.
+ *
+ * @example
+ * throw authErrorHandler(Object.assign(new Error('Timed out'), { status: 408 }));
  */
 export function authErrorHandler(err) {
   if (err instanceof AuthError) {

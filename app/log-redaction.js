@@ -329,8 +329,30 @@ function redactValue(value, seen, depth, key) {
   return redactObject(value, seen, depth);
 }
 
+/**
+ * Produces log-safe copies of values by redacting tokens, credentials,
+ * sensitive fields, authorization headers, and sensitive URL parameters.
+ * Circular references and binary values are represented safely.
+ *
+ * @param {Array<unknown>} data - Values that would otherwise be passed to a
+ * log method.
+ * @returns {Array<unknown>} A redacted copy of the supplied values.
+ *
+ * @example
+ * const safeArgs = redactLogData([{ authorization: 'Bearer secret-token' }]);
+ * console.log(safeArgs); // [{ authorization: '***REDACTED***' }]
+ * @internal
+ */
 export function redactLogData(data) {
   return data.map(item => redactValue(item, new WeakSet(), 0));
 }
 
+/**
+ * Placeholder used for a value removed from log output.
+ *
+ * @type {string}
+ * @example
+ * console.log(REDACTED_VALUE); // "***REDACTED***"
+ * @internal
+ */
 export { REDACTED_VALUE };

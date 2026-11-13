@@ -24,19 +24,26 @@
 //-----------------------------------------------------------------------------
 //
 
+import { Storage } from "./types/storage";
+import { Reference } from "./types/ref";
+import { ListResult } from "./types/list";
+import { UploadTask, UploadTaskSnapshot } from "./types/upload";
+import { TaskEvent, TaskState } from "./types/taskstate";
+import { StorageError, StorageErrorCode } from "./errors";
+
 /**
  * @module storage
  * @description Exports storage-related classes and constants.
  */
 declare const storage: {
-  Storage: typeof import("./types/storage").Storage;
-  Reference: typeof import("./types/ref").Reference;
-  ListResult: typeof import("./types/list").ListResult;
-  UploadTask: typeof import("./types/upload").UploadTask;
-  UploadTaskSnapshot: typeof import("./types/upload").UploadTaskSnapshot;
-  TaskEvent: typeof import("./types/taskstate").TaskEvent;
-  TaskState: typeof import("./types/taskstate").TaskState;
-  StorageError: typeof import("./errors").StorageError;
-  StorageErrorCode: typeof import("./errors").StorageErrorCode;
+  Storage: typeof Storage;
+  Reference: typeof Reference;
+  ListResult: typeof ListResult;
+  UploadTask: typeof UploadTask;
+  UploadTaskSnapshot: typeof UploadTaskSnapshot;
+  TaskEvent: typeof TaskEvent;
+  TaskState: typeof TaskState;
+  StorageError: typeof StorageError;
+  StorageErrorCode: typeof StorageErrorCode;
 };
 export default storage;

@@ -316,7 +316,7 @@ export class ONPREMUserHelper {
     const params = {
       method: "PUT",
       headers: {
-        "X-AUTHZ": this.access_token.token,
+        "Authorization": `Bearer ${this.access_token.token}`,
       },
       body: JSON.stringify(body),
     };
@@ -361,7 +361,7 @@ export class ONPREMUserHelper {
     const params = {
       method: "PUT",
       headers: {
-        "X-AUTHZ": this.access_token.token,
+        "Authorization": `Bearer ${this.access_token.token}`,
       },
       body: JSON.stringify(data),
     };
@@ -374,7 +374,7 @@ export class ONPREMUserHelper {
         method: params.method,
         headers: {
           ...params.headers,
-          "X-AUTHZ": "***REDACTED***",
+          "Authorization": "Bearer ***REDACTED***",
         },
         body: "<PASSWORD CHANGE PAYLOAD REDACTED>",
       };
@@ -511,16 +511,21 @@ export class ONPREMUserHelper {
    */
   async listenForAuthToken(popupWindow) {
     const expectedOrigin = new URL(this.config.domainURL).origin;
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve) => {
       const controller = new AbortController();
       let providerAuthToken = (event) => {
-        const data = JSON.parse(event.data);
-        if (event.source != popupWindow)
-          return;
+        if (event.source !== popupWindow) return;
         if (event.origin !== expectedOrigin) return;
-        Utils.baasLogger(this.#logLevel, "Received auth popup message");
-        controller.abort(); //remove listener after getting response from Popup
-        resolve(data);
+        try {
+          const data = JSON.parse(event.data);
+          Utils.baasLogger(this.#logLevel, event.data);
+          controller.abort(); //remove listener after getting response from Popup
+          resolve(data);
+        } catch {
+          // Ignore malformed messages from the trusted popup and continue
+          // waiting for its valid response.
+          return;
+        }
       }
       window.addEventListener("message",
         providerAuthToken,
@@ -637,7 +642,7 @@ export class ONPREMUserHelper {
 //       method: "POST",
 //       headers: {
 //         "Content-Type": "application/json",
-//         "X-AUTHZ": this.access_token.token,
+//         "Authorization": `Bearer ${this.access_token.token}`,
 //       },
 //       body: JSON.stringify(body),
 //     };

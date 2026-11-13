@@ -30,6 +30,9 @@ import { SAMLAuthCredential } from "../types/credential.js";
 /**
  * Represents a SAML authentication provider.
  * @extends AuthProvider
+ * @example
+ * const provider = new SAMLAuthProvider('saml_example');
+ * const result = await auth.signInWithPopup(provider);
  */
 export class SAMLAuthProvider extends AuthProvider {
 
@@ -42,7 +45,10 @@ export class SAMLAuthProvider extends AuthProvider {
   /**
    * Creates a new SAMLAuthProvider.
    * @param {string} providerId - The provider ID.
+   * @returns {SAMLAuthProvider} The configured provider.
    * @throws {Error} If invalid providerId.
+   * @example
+   * const provider = new SAMLAuthProvider('saml_example');
    */
   constructor(providerId) {
     // Input Sanitation
@@ -68,6 +74,8 @@ export class SAMLAuthProvider extends AuthProvider {
    * @param {string} accessToken - The access token.
    * @returns {SAMLAuthCredential} The created credential.
    * @throws {Error} If invalid credentials.
+   * @example
+   * const credential = SAMLAuthProvider.credential(idToken, accessToken);
    */
   static credential (idToken, accessToken) {
 

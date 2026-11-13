@@ -81,7 +81,17 @@ async function validateMetadataDownloadSize(ref, maxDownloadSizeBytes) {
 
 /**
  * @module storage
- * @description Exports storage-related classes and constants.
+ * @description Public Storage APIs for object references, uploads, listing,
+ * task state, and Storage errors.
+ * @example
+ * const ref = appInstance.storage().ref('images/logo.png');
+ * const task = ref.put(file);
+ */
+/**
+ * Namespace containing the public Storage SDK constructors and constants.
+ * @type {object}
+ * @example
+ * const state = storage.TaskState.SUCCESS;
  */
 var storage = {
   Storage: Storage,

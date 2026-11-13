@@ -31,6 +31,8 @@ import { AuthCredential } from "../types/credential.js";
 /**
  * Represents an email authentication provider.
  * @extends AuthProvider
+ * @example
+ * const credential = EmailAuthProvider.credential('user@example.com', 'password');
  */
 export class EmailAuthProvider extends AuthProvider {
   /**
@@ -53,6 +55,7 @@ export class EmailAuthProvider extends AuthProvider {
 
   /**
    * Creates a new EmailAuthProvider.
+   * @returns {EmailAuthProvider} The configured provider.
    */
   constructor() {
     super('password')
@@ -63,6 +66,8 @@ export class EmailAuthProvider extends AuthProvider {
    * @param {string} email - The user's email.
    * @param {string} password - The user's password.
    * @returns {AuthCredential} The created credential.
+   * @example
+   * const credential = EmailAuthProvider.credential('user@example.com', 'password');
    */
   static credential(email, password) {
     const credential = new EmailAuthCredential(EmailAuthProvider.PROVIDER_ID,
@@ -75,6 +80,8 @@ export class EmailAuthProvider extends AuthProvider {
    * @param {string} email - The user's email.
    * @param {string} emailLink - The email link for sign-in.
    * @returns {AuthCredential} The created credential.
+   * @example
+   * const credential = EmailAuthProvider.credentialWithLink('user@example.com', emailLink);
    */
   static credentialWithLink(email, emailLink) {
     const credential = new EmailAuthCredential(EmailAuthProvider.PROVIDER_ID,

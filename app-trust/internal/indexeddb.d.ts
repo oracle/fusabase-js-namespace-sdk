@@ -24,12 +24,19 @@
 //
 //-----------------------------------------------------------------------------
 
+/** Token record persisted locally by App Trust. @internal */
 export type PersistedAppTrustToken = {
+  /** Opaque App Trust token. */
   token: string;
+  /** Cache expiry time in Unix milliseconds. */
   expireTimeMillis: number;
+  /** Write time in Unix milliseconds. */
   updatedAtMillis: number;
 };
 
+/** @internal Reads a persisted token record. */
 export declare function idbGetAppTrustToken(key: string): Promise<PersistedAppTrustToken | undefined>;
+/** @internal Writes a persisted token record. */
 export declare function idbSetAppTrustToken(key: string, value: PersistedAppTrustToken): Promise<void>;
+/** @internal Deletes a persisted token record. */
 export declare function idbRemoveAppTrustToken(key: string): Promise<void>;

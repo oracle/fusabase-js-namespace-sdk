@@ -27,12 +27,37 @@
 
 import { oracledbErrorHandler, errorMessages, formatMessage } from "../errors.js";
 
+/**
+ * Metadata describing whether a snapshot came from cache and whether it
+ * includes pending local writes.
+ *
+ * @example
+ * if (snapshot.metadata.fromCache) console.log('Showing cached data');
+ */
 export class SnapshotMetadata {
+  /**
+   * Creates snapshot metadata.
+   *
+   * @param {boolean} frCache - Whether the snapshot was read from cache.
+   * @param {boolean} pendingWrites - Whether local writes are pending.
+   * @returns {SnapshotMetadata} The constructed metadata.
+   * @example
+   * const metadata = new SnapshotMetadata(true, false);
+   */
   constructor(frCache, pendingWrites) {
     this.fromCache = frCache;
     this.hasPendingWrites = pendingWrites;
   }
 
+  /**
+   * Compares this metadata with another metadata instance.
+   *
+   * @param {SnapshotMetadata} other - Metadata to compare.
+   * @returns {boolean} `true` when both flags match.
+   * @throws {OracledbError} When `other` is not snapshot metadata.
+   * @example
+   * metadata.isEqual(new SnapshotMetadata(true, false));
+   */
   isEqual(other) {
     if (!(other instanceof SnapshotMetadata)) {
       let error = new Error(formatMessage(errorMessages.notSnapshotMetadataInstance));

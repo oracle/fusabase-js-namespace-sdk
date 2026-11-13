@@ -29,48 +29,86 @@
 
 import { App } from "../app/app.js";
 import { Auth } from "../auth/types/auth.js";
+import { UserCredential } from "../auth/types/user.js";
 
 /**
- * Configuration options for AuthUI.
+ * Options that control the provider controls and post-sign-in flow of an
+ * `AuthUI` instance.
  */
-interface AuthUIConfig {
+export interface AuthUIConfig {
   /**
-   * Array of sign-in provider IDs.
+   * Provider IDs whose controls are displayed. Supported values are
+   * `EmailAuthProvider.PROVIDER_ID`, `GoogleAuthProvider.PROVIDER_ID`,
+   * `FacebookAuthProvider.PROVIDER_ID`, and `GithubAuthProvider.PROVIDER_ID`.
+   *
+   * When omitted or empty, no sign-in provider controls are shown.
    */
   signInOptions?: string[];
   /**
-   * URL to redirect to after successful sign-in.
+   * Browser URL to open after a successful sign-in. A `false` return from
+   * `signInSuccessWithAuthResult` suppresses this redirect.
    */
   signInSuccessUrl?: string;
   /**
-   * Callbacks for sign-in events.
+   * Callbacks invoked for authentication events.
    */
   callbacks?: {
     /**
-     * Callback for successful sign-in.
+     * Runs after a successful email/password or supported popup sign-in.
+     * Return `false` to prevent the configured success redirect.
+     *
+     * @param result - Credentials for the authenticated user.
+     * @param redirectUrl - The configured `signInSuccessUrl`, if any.
+     * @returns Whether the UI may perform the configured redirect.
      */
-    signInSuccessWithAuthResult?: (result: any, redirectUrl?: string) => boolean;
+    signInSuccessWithAuthResult?: (result: UserCredential, redirectUrl?: string) => boolean;
   };
 }
 
 /**
- * AuthUI class for handling authentication UI.
+ * A browser-only, prebuilt authentication interface.
+ *
+ * Construct it with an initialized {@link App} or {@link Auth} service, then
+ * call {@link AuthUI.start} to mount it. The UI supports email/password,
+ * Google, Facebook, and GitHub authentication.
+ *
+ * @example
+ * const ui = new authUI.AuthUI(app);
+ * ui.start("#auth-container", {
+ *   signInOptions: [auth.EmailAuthProvider.PROVIDER_ID]
+ * });
  */
 declare class AuthUI {
   /**
-   * Creates a new AuthUI instance.
-   * @param appOrConfig - App instance, Auth instance, or configuration object.
+   * Creates an authentication UI bound to an initialized app or service.
+   *
+   * @param appOrConfig - The app or the authentication service it owns.
    */
-  constructor(appOrConfig: App | Auth | any);
+  constructor(appOrConfig: App | Auth);
 
   /**
-   * Starts the AuthUI in the specified container.
-   * @param containerId - Container element or ID.
-   * @param config - Configuration options.
+   * Mounts the UI in a CSS-selected container or an `HTMLElement`.
+   *
+   * An existing container contents are replaced. If configured, successful
+   * sign-in invokes the callback before navigating to `signInSuccessUrl`.
+   *
+   * @param containerId - A CSS selector or container element.
+   * @param config - Provider, callback, and redirect options.
+   * @returns Nothing.
+   * @throws {Error} If no matching container exists.
+   *
+   * @example
+   * ui.start(document.querySelector("#auth-container")!, {
+   *   signInOptions: [auth.GoogleAuthProvider.PROVIDER_ID],
+   *   signInSuccessUrl: "/dashboard"
+   * });
    */
   start(containerId: string | HTMLElement, config?: AuthUIConfig): void;
 }
 
+/**
+ * Namespace containing optional Fusabase authentication UI components.
+ */
 declare const authUI: {
   AuthUI: typeof AuthUI;
 };

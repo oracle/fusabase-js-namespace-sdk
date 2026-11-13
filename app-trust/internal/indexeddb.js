@@ -65,6 +65,17 @@ async function withStore(mode, fn) {
   }
 }
 
+/**
+ * Reads a persisted App Trust token from IndexedDB when IndexedDB is available.
+ *
+ * @param {string} key - Storage key, normally a project-and-app identifier.
+ * @returns {Promise<{token: string, expireTimeMillis: number, updatedAtMillis: number}|undefined>}
+ * The stored token record, or `undefined` when absent or IndexedDB is unavailable.
+ *
+ * @example
+ * const record = await idbGetAppTrustToken('project-id:app-id');
+ * @internal
+ */
 export async function idbGetAppTrustToken(key) {
   if (!hasIndexedDb()) return undefined;
   const result = await withStore('readonly', (store) => store.get(key));
@@ -72,11 +83,33 @@ export async function idbGetAppTrustToken(key) {
   return result;
 }
 
+/**
+ * Persists an App Trust token record in IndexedDB when available.
+ *
+ * @param {string} key - Storage key, normally a project-and-app identifier.
+ * @param {{token: string, expireTimeMillis: number, updatedAtMillis: number}} value -
+ * Token record to persist.
+ * @returns {Promise<void>} A promise that resolves after the write completes.
+ *
+ * @example
+ * await idbSetAppTrustToken('project-id:app-id', tokenRecord);
+ * @internal
+ */
 export async function idbSetAppTrustToken(key, value) {
   if (!hasIndexedDb()) return;
   await withStore('readwrite', (store) => store.put(value, key));
 }
 
+/**
+ * Deletes a persisted App Trust token record from IndexedDB when available.
+ *
+ * @param {string} key - Storage key, normally a project-and-app identifier.
+ * @returns {Promise<void>} A promise that resolves after deletion completes.
+ *
+ * @example
+ * await idbRemoveAppTrustToken('project-id:app-id');
+ * @internal
+ */
 export async function idbRemoveAppTrustToken(key) {
   if (!hasIndexedDb()) return;
   await withStore('readwrite', (store) => store.delete(key));

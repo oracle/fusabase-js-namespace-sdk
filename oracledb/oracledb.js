@@ -44,7 +44,20 @@ import LogLevel from "../logger.js";
 
 /**
  * @module oracledb
- * @description Exports oracledb-related classes and constants.
+ * @description Public OracleDB APIs, query types, snapshots, transactions,
+ * field helpers, errors, and realtime-listener types.
+ *
+ * @example
+ * const db = appInstance.oracledb();
+ * const snapshot = await db.collection('users').get();
+ * snapshot.forEach((document) => console.log(document.id, document.data()));
+ */
+/**
+ * Namespace containing the public OracleDB SDK constructors and constants.
+ *
+ * @type {object}
+ * @example
+ * const query = new oracledb.FieldPath('profile', 'name');
  */
 const oracledb = {
   Timestamp: Timestamp,

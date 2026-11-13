@@ -1,6 +1,8 @@
 // Copyright (c) 2015, 2026, Oracle and/or its affiliates.
 
 //-----------------------------------------------------------------------------
+
+import { getAppStorageScope } from "./storage-scope.js";
 //
 // This software is dual-licensed to you under the Universal Permissive License
 // (UPL) 1.0 as shown at https://oss.oracle.com/licenses/upl and Apache License
@@ -24,9 +26,26 @@
 //
 //-----------------------------------------------------------------------------
 
+/**
+ * The browser local-storage key used for the persisted SDK instance ID.
+ *
+ * @type {string}
+ * @example
+ * const instanceId = localStorage.getItem(FUSABASE_INSTANCE_ID_STORAGE_KEY);
+ */
 export const FUSABASE_INSTANCE_ID_STORAGE_KEY = 'fusabase_instance_id';
 
-/** @internal */
+/**
+ * Creates a cryptographically random instance ID.
+ *
+ * @returns {string} A UUID when `crypto.randomUUID()` is available, otherwise
+ * a random hexadecimal identifier.
+ * @throws {Error} When secure browser crypto is unavailable.
+ *
+ * @example
+ * const instanceId = generateInstanceId();
+ * @internal
+ */
 export function generateInstanceId() {
   try {
     const c = globalThis.crypto;
@@ -43,15 +62,27 @@ export function generateInstanceId() {
   throw new Error('Unable to generate instance ID: crypto.getRandomValues is unavailable');
 }
 
-/** @internal */
-export function getOrCreateBrowserInstanceId() {
+/**
+ * Gets the browser's persisted instance ID, creating and persisting one when
+ * needed. If local storage is unavailable, returns a new in-memory ID.
+ *
+ * @param {object} [app] - App whose browser-storage namespace owns the ID.
+ * @returns {string} The existing or newly generated instance ID.
+ * @throws {Error} When secure browser crypto is unavailable.
+ *
+ * @example
+ * const instanceId = getOrCreateBrowserInstanceId();
+ * @internal
+ */
+export function getOrCreateBrowserInstanceId(app) {
   try {
     const ls = globalThis.localStorage;
     if (ls) {
-      const existing = ls.getItem(FUSABASE_INSTANCE_ID_STORAGE_KEY);
+      const storageKey = `${FUSABASE_INSTANCE_ID_STORAGE_KEY}:${getAppStorageScope(app)}`;
+      const existing = ls.getItem(storageKey);
       if (existing) return existing;
       const created = generateInstanceId();
-      ls.setItem(FUSABASE_INSTANCE_ID_STORAGE_KEY, created);
+      ls.setItem(storageKey, created);
       return created;
     }
   } catch {

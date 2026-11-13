@@ -25,13 +25,26 @@
 //-----------------------------------------------------------------------------
 
 /**
- * ReCaptcha v3 provider (browser-only).
+ * Browser-only App Trust provider backed by Google reCAPTCHA v3. The SDK loads
+ * the reCAPTCHA script on first use and requests a token for each attestation.
+ *
+ * @example
+ * const provider = new ReCaptchaV3Provider('your-recaptcha-v3-site-key');
+ * initializeAppTrust(appInstance, { provider });
  */
 export class ReCaptchaV3Provider {
-  /** @type {string} */
+  /** @type {string} The reCAPTCHA v3 site key. */
   siteKey;
 
-  /** @param {string} siteKey */
+  /**
+   * Creates a reCAPTCHA v3 provider.
+   *
+   * @param {string} siteKey - The reCAPTCHA v3 site key for this application.
+   * @returns {ReCaptchaV3Provider} The configured provider.
+   *
+   * @example
+   * const provider = new ReCaptchaV3Provider('your-site-key');
+   */
   constructor(siteKey) {
     this.siteKey = siteKey;
   }
@@ -80,13 +93,25 @@ export class ReCaptchaV3Provider {
 }
 
 /**
- * ReCaptcha Enterprise provider (browser-only).
+ * Browser-only App Trust provider backed by Google reCAPTCHA Enterprise.
+ *
+ * @example
+ * const provider = new ReCaptchaEnterpriseProvider('your-enterprise-site-key');
+ * initializeAppTrust(appInstance, { provider });
  */
 export class ReCaptchaEnterpriseProvider {
-  /** @type {string} */
+  /** @type {string} The reCAPTCHA Enterprise site key. */
   siteKey;
 
-  /** @param {string} siteKey */
+  /**
+   * Creates a reCAPTCHA Enterprise provider.
+   *
+   * @param {string} siteKey - The reCAPTCHA Enterprise site key.
+   * @returns {ReCaptchaEnterpriseProvider} The configured provider.
+   *
+   * @example
+   * const provider = new ReCaptchaEnterpriseProvider('your-site-key');
+   */
   constructor(siteKey) {
     this.siteKey = siteKey;
   }
@@ -136,20 +161,33 @@ export class ReCaptchaEnterpriseProvider {
 }
 
 /**
- * Turnstile provider (Cloudflare Turnstile) (browser-only).
+ * Browser-only App Trust provider backed by Cloudflare Turnstile.
+ *
+ * @example
+ * const provider = new TurnstileProvider('your-turnstile-site-key', {
+ *   action: 'attest',
+ * });
+ * initializeAppTrust(appInstance, { provider });
  */
 export class TurnstileProvider {
-  /** @type {string} */
+  /** @type {string} The Cloudflare Turnstile site key. */
   siteKey;
-  /** @type {{action?: string, cData?: string} | undefined} */
+  /** @type {{action?: string, cData?: string} | undefined} Optional Turnstile configuration. */
   options;
 
   /** @type {Promise<string> | undefined} */
   _inFlight;
 
   /**
-   * @param {string} siteKey
-   * @param {{action?: string, cData?: string}} [options]
+   * Creates a Cloudflare Turnstile provider.
+   *
+   * @param {string} siteKey - The Turnstile site key.
+   * @param {{action?: string, cData?: string}} [options] - Optional action and
+   * Cloudflare customer data sent to Turnstile.
+   * @returns {TurnstileProvider} The configured provider.
+   *
+   * @example
+   * const provider = new TurnstileProvider('your-site-key', { cData: 'tenant-a' });
    */
   constructor(siteKey, options) {
     this.siteKey = siteKey;
@@ -275,17 +313,35 @@ export class TurnstileProvider {
   }
 }
 
-/** @deprecated Use {@link TurnstileProvider}. */
+/**
+ * Backward-compatible alias for {@link TurnstileProvider}.
+ *
+ * @deprecated Use {@link TurnstileProvider}.
+ * @example
+ * const provider = new CloudflareTurnstileProvider('your-site-key');
+ */
 export class CloudflareTurnstileProvider extends TurnstileProvider {}
 
 /**
- * hCaptcha provider (browser-only).
+ * Browser-only App Trust provider backed by hCaptcha.
+ *
+ * @example
+ * const provider = new HCaptchaProvider('your-hcaptcha-site-key');
+ * initializeAppTrust(appInstance, { provider });
  */
 export class HCaptchaProvider {
-  /** @type {string} */
+  /** @type {string} The hCaptcha site key. */
   siteKey;
 
-  /** @param {string} siteKey */
+  /**
+   * Creates an hCaptcha provider.
+   *
+   * @param {string} siteKey - The hCaptcha site key.
+   * @returns {HCaptchaProvider} The configured provider.
+   *
+   * @example
+   * const provider = new HCaptchaProvider('your-site-key');
+   */
   constructor(siteKey) {
     this.siteKey = siteKey;
   }

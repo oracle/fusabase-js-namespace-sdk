@@ -24,9 +24,14 @@
 //
 //-----------------------------------------------------------------------------
 // 
+/** Error raised when an App Trust operation fails. */
 export declare class FusabaseAppTrustError extends Error {
+  /** Optional HTTP status reported by the failure. */
   status?: number;
+  /** Optional SDK-specific error code. */
   code?: string;
+  /** Original error or server response that caused this failure. */
   override cause?: unknown;
+  /** @param message Failure message. @param opts Optional error details. */
   constructor(message: string, opts?: { status?: number; code?: string; cause?: unknown });
 }

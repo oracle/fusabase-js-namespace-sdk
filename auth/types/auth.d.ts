@@ -95,7 +95,16 @@ export class Auth {
    * @param {Auth} auth - Auth instance.
    * @returns {Promise<UserCredential|null>} Redirect result.
    */
-  getRedirectResult(): Promise<UserCredential | null>;
+  getRedirectResult(auth?: Auth): Promise<UserCredential | null>;
+
+  /** Returns the provider saved for a pending redirect flow. */
+  getProvider(): GoogleAuthProvider | FacebookAuthProvider | GithubAuthProvider | IDCSAuthProvider | SAMLAuthProvider | OAuthProvider;
+
+  /**
+   * Anonymous sign-in placeholder.
+   * @throws Always throws because anonymous sign-in is not implemented.
+   */
+  signInAnonymously(): Promise<string>;
 
   /**
    * Async method to sign in with credential.
@@ -116,8 +125,8 @@ export class Auth {
   onAuthStateChanged(observer: (user: User | null) => void): () => void;
 
   /**
-   * Adds an observer for changes to the signed-in user's ID token, 
-   * which includes sign-in, sign-out, and token refresh events. 
+   * Adds an observer for changes to the signed-in user's ID token,
+   * which includes sign-in, sign-out, and token refresh events.
    * Returns a function to unsubscribe from listening the state.
    * @param {CallableFunction} observer - Observer function.
    * @returns {CallableFunction} Unsubscribe function.
@@ -141,7 +150,10 @@ export class Auth {
    * @param {User} user - User to update.
    * @returns {Promise<User>} Updated current user.
    */
-  updateCurrentUser(user: User | null): Promise<void>;
+  updateCurrentUser(user: User | null): Promise<User | null>;
+
+  /** Most recent successful sign-in credential, or `null` before sign-in and after sign-out. */
+  readonly userCredential: UserCredential | null;
 
   /**
    * Async method to send password reset email.
