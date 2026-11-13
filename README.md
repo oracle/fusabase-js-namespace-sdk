@@ -1,5 +1,5 @@
 <br />
-<h1 align="center">Oracle Backend with Firebase APIs (Fusabase) JavaScript Namespace SDK</h1>
+<h1 align="center">Fusabase JavaScript Namespace SDK</h1>
 
 <p align="center">
   <a href="https://docs.oracle.com/en/database/oracle/backend-for-firebase/26.3/index.html">Guides</a>
