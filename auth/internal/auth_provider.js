@@ -24,7 +24,10 @@
 //-----------------------------------------------------------------------------
 
 /**
- * Represents an authentication provider used with Auth Credential.
+ * Base class for authentication providers.
+ *
+ * @example
+ * const provider = new AuthProvider('custom-provider');
  */
 export class AuthProvider {
   /**
@@ -34,8 +37,13 @@ export class AuthProvider {
   providerId;
 
   /**
-   * Creates a new instance of AuthProvider.
-   * @param {string} providerId - The ID of the provider.
+   * Creates a provider.
+   *
+   * @param {string} providerId - Unique provider identifier.
+   * @returns {AuthProvider} The constructed provider.
+   *
+   * @example
+   * const provider = new AuthProvider('custom-provider');
    */
   constructor(providerId) {
     this.providerId = providerId;

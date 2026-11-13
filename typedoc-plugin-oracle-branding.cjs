@@ -3,7 +3,7 @@
 // Works by hooking into the renderer's endPage event and wrapping the generated HTML.
 
 const HEADER_HTML =
-  '<b> Oracle&reg; Backend For Firebase JavaScript Namespace SDK Reference <br>Release 26.1.0</b><br>G48197-02<br>';
+  '<b> Oracle&reg; Backend with Firebase APIs JavaScript Namespace SDK Reference <br>Release 26.3.1</b><br>G62182-02<br>';
 const BOTTOM_HTML = 'Copyright &copy; 2026, Oracle and/or its affiliates.';
 
 module.exports.load = function (app) {

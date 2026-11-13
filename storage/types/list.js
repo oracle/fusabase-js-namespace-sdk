@@ -25,7 +25,11 @@
 // 
 
 /**
- * ListResult - Class representing the list of files present.
+ * One page of storage references returned by `Reference.list()` or `listAll()`.
+ *
+ * @example
+ * const result = await storage.ref('images').list();
+ * result.items.forEach((ref) => console.log(ref.fullPath));
  */
 export class ListResult {
   /**
@@ -50,6 +54,7 @@ export class ListResult {
    * Creates a new ListResult instance.
    *
    * @param {Object} data - Data object containing items, prefixes, and nextPageToken.
+   * @returns {ListResult} The constructed list result.
    */
   constructor(data) {
     this.items = data.items;

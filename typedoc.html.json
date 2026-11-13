@@ -13,7 +13,7 @@
     "**/*.test.*",
     "**/__tests__/**"
   ],
-  "name": "Oracle® Backend For Firebase JavaScript Namespace SDK Reference, Release 26.1.0",
+  "name": "Oracle® Backend with Firebase APIs JavaScript Namespace SDK Reference, Release 26.3.1",
   "readme": "README.md",
   "plugin": ["./typedoc-plugin-oracle-branding.cjs"]
 }

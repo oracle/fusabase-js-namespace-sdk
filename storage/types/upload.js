@@ -30,7 +30,12 @@ import { TaskState, TaskEvent } from "./taskstate.js";
 import { storageErrorHandler, StorageErrorMessages } from "../errors.js";
 
 /**
- * UploadTask - Class representing the upload task.
+ * Thenable task representing an in-progress object upload.
+ *
+ * @example
+ * const task = storage.ref('images/logo.png').put(file);
+ * task.on(TaskEvent.STATE_CHANGED, (snapshot) => console.log(snapshot.bytesTransferred));
+ * const snapshot = await task;
  */
 export class UploadTask {
   /**
@@ -75,6 +80,7 @@ export class UploadTask {
    * @param {Object} data - The data to upload.
    * @param {FullMetadata} metadata - Metadata for the upload.
    * @param {Object} ref - Reference to the storage location.
+   * @returns {UploadTask} The created upload task.
    */
   constructor(data, metadata, ref) {
     this._tasks = [];
@@ -176,6 +182,9 @@ export class UploadTask {
   /**
    * @property {Function} cancel
    * Cancels the upload task.
+   * @returns {void} This method does not return a value.
+   * @example
+   * task.cancel();
    */
   cancel() {
     this._enqueue(async () => {
@@ -200,6 +209,9 @@ export class UploadTask {
    * @param {Function} [complete=null] - Complete callback.
    * @returns {Function} Unsubscribe function or callback setter.
    * @throws {StorageError} Throws an error if invalid arguments.
+   * @example
+   * const unsubscribe = task.on(TaskEvent.STATE_CHANGED, (snapshot) => console.log(snapshot.state));
+   * unsubscribe();
    */
   on(event, next = null, error = null, complete = null) {
     argCheck(event, StorageErrorMessages.INVALID_EVENT_PASSED, true, [typeStrings.STRING]);
@@ -279,7 +291,10 @@ export class UploadTask {
 
   /**
    * @property {Function} resume
-   * Resumes the upload task if it's multipart.
+   * Resumes a paused multipart upload.
+   * @returns {void} This method does not return a value.
+   * @example
+   * task.resume();
    */
   resume() {
     if (!this.#uploadController.isMultipart) {
@@ -300,7 +315,10 @@ export class UploadTask {
 
   /**
    * @property {Function} pause
-   * Pauses the upload task if it's multipart.
+   * Pauses a running multipart upload.
+   * @returns {void} This method does not return a value.
+   * @example
+   * task.pause();
    */
   pause() {
     if (!this.#uploadController.isMultipart) {
@@ -323,6 +341,8 @@ export class UploadTask {
    * @param {Function} onReject - Reject callback.
    * @returns {Promise} The task promise.
    * @throws {StorageError} Throws an error if invalid callbacks.
+   * @example
+   * task.then((snapshot) => console.log(snapshot.metadata.fullPath));
    */
   then(onSuccess, onReject) {
     argCheck(onSuccess, StorageErrorMessages.INVALID_SUCCESS_CALLBACK, false,
@@ -338,6 +358,8 @@ export class UploadTask {
    * @param {Function} onRejected - Reject callback.
    * @returns {Promise} The task promise.
    * @throws {StorageError} Throws an error if invalid callback.
+   * @example
+   * task.catch((error) => console.error(error.code));
    */
   catch(onRejected) {
     argCheck(onRejected, StorageErrorMessages.INVALID_CALLBACK, false, [typeStrings.FUNCTION]);
@@ -346,7 +368,10 @@ export class UploadTask {
 }
 
 /**
- * UploadTaskSnapshot - Class representing the snapshot of upload task.
+ * Immutable-style progress data emitted by an `UploadTask`.
+ *
+ * @example
+ * task.on(TaskEvent.STATE_CHANGED, (snapshot) => console.log(snapshot.state));
  */
 export class UploadTaskSnapshot {
   /**
@@ -391,6 +416,7 @@ export class UploadTaskSnapshot {
    * @param {UploadTask} task - The upload task.
    * @param {FullMetadata} metadata - Metadata for the upload.
    * @param {Reference} ref - Reference to the storage location.
+   * @returns {UploadTaskSnapshot} The constructed upload snapshot.
    */
   constructor(task, metadata, ref) {
     this.task = task;

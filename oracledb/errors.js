@@ -28,6 +28,10 @@
 /**
  * OracledbErrorCode - Enum-like object containing oracledb error codes.
  * @enum {string}
+ * @example
+ * if (error.code === `oracledb/${OracledbErrorCode.UNAUTHENTICATED}`) {
+ *   // Prompt the user to sign in again.
+ * }
  */
 export const OracledbErrorCode = Object.freeze({
   INVALID_ARGUMENT: 'invalid-argument',
@@ -40,9 +44,13 @@ export const OracledbErrorCode = Object.freeze({
 });
 
 /**
- * Handles errors and converts them to OracledbError instances.
- * @param {Error} err - The error to handle.
- * @returns {OracledbError} A OracledbError instance representing the handled error.
+ * Converts an error-like value to an `OracledbError` based on its HTTP status.
+ *
+ * @param {Error & {status?: number}} err - Error to normalize.
+ * @returns {OracledbError} The normalized OracleDB error.
+ *
+ * @example
+ * throw oracledbErrorHandler(Object.assign(new Error('Not found'), { status: 404 }));
  */
 export function oracledbErrorHandler(err) {
   if (err instanceof OracledbError) {
@@ -72,6 +80,8 @@ export function oracledbErrorHandler(err) {
 /**
  * OracledbError - Class representing errors thrown by Oracledb Service.
  * @extends Error
+ * @example
+ * const error = new OracledbError('not-found', 'Document does not exist');
  */
 export class OracledbError extends Error {
 
@@ -86,6 +96,10 @@ export class OracledbError extends Error {
    * @param {string} code - The error code (without the 'oracledb/' prefix).
    * @param {string} message - The error message.
    * @param {string} [stack] - The stack trace.
+   * @returns {OracledbError} The constructed error.
+   *
+   * @example
+   * throw new OracledbError('invalid-argument', 'Collection path is required');
    */
   constructor(code, message, stack) {
     super(message);
@@ -96,7 +110,11 @@ export class OracledbError extends Error {
 }
 
 /**
- * Map of all hardcoded error messages.
+ * Internal messages used by OracleDB validation and storage code.
+ *
+ * @type {Readonly<Record<string, string>>}
+ * @example
+ * const message = formatMessage(errorMessages.expectedType, 'string', 'number');
  */
 export const errorMessages = {
   deleteFieldNotAllowedInSet: 'Delete FieldValue is not allowed in set method.',
@@ -150,14 +168,19 @@ export const errorMessages = {
   incorrectComparisonOperator: 'Incorrect comparison operator',
   invalidDirection: 'Invalid direction.',
   invalidLimit: 'Invalid limit provided.',
+  unsafeFieldPath: 'Document field paths cannot contain __proto__, constructor, or prototype.',
   lastSnapshotNotFound: 'Could not locate last snapshot in indexed db'
 };
 
 /**
- * Formats a message template with provided arguments.
- * @param {string} template - The message template with {0}, {1}, etc. placeholders.
+ * Replaces `{0}`, `{1}`, and similar placeholders in an error message.
+ *
+ * @param {string} template - Message template with numbered placeholders.
  * @param {...any} args - The values to insert into the template.
  * @returns {string} The formatted message.
+ *
+ * @example
+ * formatMessage('Expected {0}, got {1}', 'string', 'number');
  */
 export function formatMessage(template, ...args) {
   return template.replace(/\{(\d+)\}/g, (match, index) => {

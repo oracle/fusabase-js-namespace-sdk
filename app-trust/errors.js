@@ -24,17 +24,37 @@
 //
 //-----------------------------------------------------------------------------
 
+/**
+ * Error raised when an App Trust operation cannot be completed.
+ *
+ * @example
+ * try {
+ *   await getToken(appTrust);
+ * } catch (error) {
+ *   if (error instanceof FusabaseAppTrustError) console.log(error.code);
+ * }
+ */
 export class FusabaseAppTrustError extends Error {
-  /** @type {number | undefined} */
+  /** @type {number | undefined} Optional HTTP status for this failure. */
   status;
-  /** @type {string | undefined} */
+  /** @type {string | undefined} Optional SDK-specific error code. */
   code;
-  /** @type {unknown} */
+  /** @type {unknown} Original server response or error cause. */
   cause;
 
   /**
-   * @param {string} message
-   * @param {{status?: number, code?: string, cause?: unknown}} [opts]
+   * Creates an App Trust error.
+   *
+   * @param {string} message - Human-readable explanation of the failure.
+   * @param {{status?: number, code?: string, cause?: unknown}} [opts] -
+   * Optional HTTP status, SDK error code, and originating cause.
+   * @returns {FusabaseAppTrustError} The constructed error.
+   *
+   * @example
+   * throw new FusabaseAppTrustError('App Trust is unavailable', {
+   *   code: 'app-trust/unavailable',
+   *   status: 503,
+   * });
    */
   constructor(message, opts) {
     super(message);

@@ -27,6 +27,15 @@
 
 import { Timestamp } from "../types/timestamp.js";
 
+function setOwnDataProperty(object, key, value) {
+  Object.defineProperty(object, key, {
+    value,
+    enumerable: true,
+    writable: true,
+    configurable: true
+  });
+}
+
 /**
  * Convert all Timestamp instances to timestamp strings.
  *
@@ -48,7 +57,7 @@ export function parseTimestamp(obj) {
       const newObj = {};
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
-          newObj[key] = parseTimestamp(obj[key]);
+          setOwnDataProperty(newObj, key, parseTimestamp(obj[key]));
         }
       }
       return newObj;
@@ -85,7 +94,7 @@ export function parseTimeInDocument(obj) {
       const newObj = {};
       for (const key in obj) {
         if (Object.prototype.hasOwnProperty.call(obj, key)) {
-          newObj[key] = parseTimeInDocument(obj[key]);
+          setOwnDataProperty(newObj, key, parseTimeInDocument(obj[key]));
         }
       }
       return newObj;

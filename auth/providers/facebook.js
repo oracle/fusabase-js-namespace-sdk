@@ -33,6 +33,8 @@ import { authErrorHandler, ErrorCode } from "../errors.js";
 /**
  * Represents a Facebook authentication provider.
  * @extends AuthProvider
+ * @example
+ * const result = await auth.signInWithPopup(new FacebookAuthProvider());
  */
 export class FacebookAuthProvider extends AuthProvider {
   /**
@@ -56,6 +58,7 @@ export class FacebookAuthProvider extends AuthProvider {
 
   /**
    * Creates a new FacebookAuthProvider.
+   * @returns {FacebookAuthProvider} The configured provider.
    */
   constructor() {
     super(FacebookAuthProvider.PROVIDER_ID);
@@ -92,6 +95,8 @@ export class FacebookAuthProvider extends AuthProvider {
    * @param {string} [accessToken] - The access token.
    * @returns {OAuthCredential} The created credential.
    * @throws {Error} If no token is provided or invalid arguments.
+   * @example
+   * const credential = FacebookAuthProvider.credential(idToken, accessToken);
    */
   static credential(idToken, accessToken) {
     if (!accessToken && !idToken) {

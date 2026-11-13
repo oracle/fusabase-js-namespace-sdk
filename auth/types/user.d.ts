@@ -127,7 +127,10 @@ export class User {
    * Converts user to JSON.
    * @returns {string} JSON string of the user.
    */
-  toJSON(): object;
+  toJSON(): string;
+
+  /** Gets the Fusabase service token, refreshing it when needed. */
+  getFUSABASEToken(forceRefresh?: boolean): Promise<string | null | undefined>;
 
   /**
    * Updates the user's password.

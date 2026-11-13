@@ -41,6 +41,26 @@ import { extractCallbacksForSnapshot } from "../utils/snapshot_util.js";
 import { IdTokenResult } from "../../auth/types/idtoken.js";
 import { normalizeLongPollingOptions } from "../internal/settings.js";
 
+function snapshotHash(value) {
+  let hash = 0;
+  for (let i = 0; i < value.length; i++) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function snapshotVersionMarker(snapshot) {
+  const value = snapshot?._otherMetadata?.ASOF ?? snapshot?._otherMetadata?.VERSION ?? snapshot?.__version;
+  if (value == null || value === "") return null;
+  try {
+    return BigInt(String(value));
+  } catch {
+    const timestamp = Date.parse(String(value));
+    return Number.isNaN(timestamp) ? String(value) : timestamp;
+  }
+}
+
 function getLongPollingIntervalMs(db) {
   try {
     return normalizeLongPollingOptions(
@@ -590,18 +610,6 @@ export class DocumentReference {
 
     let _queryId = createUniqueName();
 
-    String.prototype.hashCode = function () {
-      var hash = 0,
-        i, chr;
-      if (this.length === 0) return hash;
-      for (i = 0; i < this.length; i++) {
-        chr = this.charCodeAt(i);
-        hash = ((hash << 5) - hash) + chr;
-        hash |= 0; // Convert to 32bit integer
-      }
-      return hash;
-    }
-
     let tok =  getToken(this.oracledb.app);
     if (tok) {
       tok = new IdTokenResult(tok);
@@ -611,15 +619,12 @@ export class DocumentReference {
     const payload = {
       path: this._path,
       conditions: [],
-      explicitOrder: [],
-      access_token: access_token ? access_token.claims.sub : null
     };
-
-    const mappedQueryId = Math.abs(JSON.stringify(payload).hashCode());
-
-    delete payload["access_token"];
-
-    const queryId = Math.abs(JSON.stringify(payload).hashCode());
+    const snapshotKey = JSON.stringify({
+      ...payload,
+      access_token: access_token ? access_token.claims.sub : null
+    });
+    const queryId = snapshotHash(JSON.stringify(payload));
 
     const handleSnapshot = (docSnap) => {
       if (callback.next) {
@@ -634,14 +639,15 @@ export class DocumentReference {
     if (!this.oracledb._settings.experimentalAutoDetectLongPolling &&
       !this.oracledb._settings.experimentalForceLongPolling) {
 
-      //create connection
-      this.oracledb.__createSocket(access_token ? access_token.token : null, this.oracledb.app);
-
       const queryObject = {
         queryId: queryId,
         status: 1,
         payload: payload
       }
+
+      // Validate the complete, principal-aware snapshot identity on every
+      // registration, including duplicate query IDs.
+      this.oracledb.__registerSnapshotQuery(queryId, snapshotKey);
 
       //store callbacks 
       if (!Utils.memberExists(this.oracledb.__snaps, queryId)) {
@@ -649,21 +655,21 @@ export class DocumentReference {
         Utils.baasLogger(this.oracledb.app.logLevel, "__sendMessage ", queryObject);
         this.oracledb.__sendMessage(queryObject);
       }
+      this.oracledb.__createSocket(access_token ? access_token.token : null, this.oracledb.app)
+        .catch(error => Utils.baasLogger(this.oracledb.app.logLevel, "Unable to establish realtime socket", error));
       this.oracledb.__snaps[queryId].push(_queryId);
       this.oracledb.__callbacks[_queryId] = callback;
-      this.oracledb.__queryIdMap[queryId] = mappedQueryId;
 
-      this.get().then(docSnap => {
-        handleSnapshot(docSnap);
-        //store in indexed db here
-        this.oracledb.__setIndexDB({
-          queryId: mappedQueryId,
+      this.get().then(async docSnap => {
+        await this.oracledb.__setIndexDB({
+          queryId: snapshotKey,
           snap: docSnap,
           type: "document",
           path: this._path.join("/")
-        }).then(() => {
-          Utils.baasLogger(this.oracledb.app.logLevel, "added indexed db for document", _queryId);
-        }).catch(e => Utils.baasLogger(this.oracledb.app.logLevel, e));
+        });
+        Utils.baasLogger(this.oracledb.app.logLevel, "added indexed db for document", _queryId);
+        handleSnapshot(docSnap);
+        this.oracledb.__markInitialSnapshotReady(queryId);
 
       }).catch(e => {
         if (callback.error != null) {
@@ -678,9 +684,11 @@ export class DocumentReference {
       unsubscribe = () => {
         Utils.baasLogger(this.oracledb.app.logLevel, "in unsubscribe for document", this.oracledb.__snaps[queryId]);
 
-        const index = this.oracledb.__snaps[queryId].indexOf(_queryId);
+        const activeListeners = this.oracledb.__snaps[queryId];
+        if (!activeListeners) return;
+        const index = activeListeners.indexOf(_queryId);
         if (index > -1) {
-          this.oracledb.__snaps[queryId].splice(index, 1);
+          activeListeners.splice(index, 1);
           delete this.oracledb.__callbacks[_queryId];
         }
 
@@ -690,9 +698,9 @@ export class DocumentReference {
           payload: payload
         }
 
-        if (this.oracledb.__snaps[queryId].length === 0) {
-          delete this.oracledb.__queryIdMap[queryId];
+        if (activeListeners.length === 0) {
           delete this.oracledb.__snaps[queryId];
+          this.oracledb.__unregisterSnapshotQuery(queryId);
           this.oracledb.__sendMessage(unSubQueryObject);
         }
 
@@ -719,20 +727,24 @@ export class DocumentReference {
 
       const getSnap = () => {
         this.get().then(docSnap => {
-          let newVer = null;
-          if (docSnap._otherMetadata["ASOF"]) {
-            newVer = BigInt(docSnap._otherMetadata["ASOF"]);
-          } else {
-            newVer = BigInt(docSnap._otherMetadata["VERSION"]);
-          }
-          if (!lastDocUpdate || !newVer
-            || lastDocUpdate < newVer) 
+          const newVer = snapshotVersionMarker(docSnap);
+          if (lastDocUpdate == null || lastDocUpdate !== newVer)
           {
             lastDocUpdate = newVer;
             handleSnapshot(docSnap);
           }
         }
-        ).catch(e => { Utils.baasLogger(this.oracledb.app.logLevel, e); });
+        ).catch(e => {
+          this.oracledb.__eventManager?.dispatchEvent?.(new Event("long polling error"));
+          Utils.baasLogger(this.oracledb.app.logLevel, e);
+          if (callback.error != null) {
+            try {
+              callback.error(e);
+            } catch (ue) {
+              Utils.baasLogger(this.oracledb.app.logLevel, "Error in snapshot callback ", ue);
+            }
+          }
+        });
       }
 
       getSnap();

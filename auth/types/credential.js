@@ -26,9 +26,10 @@
 import { argCheck, typeStrings } from "../utils/typecheck.js";
 
 /**
- * Class representing the Auth Credentials returned by
- * the Auth Providers (i.e. EmailAuthProviders, OAuthProvider,
- * GoogleAuthProvider, etc.).
+ * Base class for credentials returned by authentication providers.
+ *
+ * @example
+ * const credential = EmailAuthProvider.credential('user@example.com', 'password');
  */
 export class AuthCredential {
 
@@ -36,9 +37,14 @@ export class AuthCredential {
   // SDK.
 
   /**
-   * Constructs an instance of AuthCredential.
-   * @param {string} providerId - Provider ID.
-   * @param {string} signInMethod - Sign in method.
+   * Creates a credential.
+   *
+   * @param {string} providerId - Provider identifier.
+   * @param {string} signInMethod - Provider-specific sign-in method.
+   * @returns {AuthCredential} The constructed credential.
+   *
+   * @example
+   * const credential = new AuthCredential('custom', 'token');
    */
   constructor(providerId, signInMethod) {
     this.providerId = providerId;
@@ -46,9 +52,12 @@ export class AuthCredential {
   }
 
   /**
-   * Method to convert the data member in a JSON format.
-   * (Needs a lookup)
-   * @returns {string} JSON string of the credential.
+   * Serializes this credential.
+   *
+   * @returns {string} JSON representation of the credential.
+   *
+   * @example
+   * const serialized = credential.toJSON();
    */
   toJSON() {
     const cred = {
@@ -59,35 +68,40 @@ export class AuthCredential {
   }
 
   /**
-   * Method to convert the data in JSON format to data members.
-   * (Needs a lookup)
-   * @param {string} authCredential - JSON string.
-   * @returns {AuthCredential} AuthCredential instance.
+   * Creates a base credential from serialized JSON.
+   *
+   * @param {string} authCredential - Serialized credential JSON.
+   * @returns {AuthCredential} The parsed credential.
+   *
+   * @example
+   * const credential = AuthCredential.fromJSON('{"providerId":"custom","signInMethod":"token"}');
    */
   static fromJSON(authCredential) {
-    argCheck(authCredential, "Invalid object", true, [typeStrings.OBJECT]);
-    const res = JSON.parse(authCredential);
+    argCheck(authCredential, "Invalid credential", true, [typeStrings.STRING, typeStrings.OBJECT]);
+    const res = typeof authCredential === "string" ? JSON.parse(authCredential) : authCredential;
     return new AuthCredential(res.providerId, res.signInMethod);
   }
 }
 
 /**
- * Credential class for email authentication.
- * 
- * @class
+ * Credential for email/password or email-link authentication.
+ *
  * @extends AuthCredential
+ * @example
+ * const credential = EmailAuthProvider.credential('user@example.com', 'password');
  */
 export class EmailAuthCredential extends AuthCredential {
   #credentials;
 
   /**
-   * Constructs an instance of EmailAuthCredential.
-   * 
-   * @constructor
-   * @param {string} providerId - Provider ID. Example: 'password'
-   * @param {string} signInMethod - Sign-in method. Example: 'password'
-   * @param {string} email - User's email. Example: 'user@example.com'
-   * @param {string|null} password - User's password (may be null after creation). Example: 'strongPass123'
+   * Creates an email credential.
+   *
+   * @param {string} providerId - Provider identifier, normally `password`.
+   * @param {string} signInMethod - `password` or `emailLink`.
+   * @param {string} email - User email address.
+   * @param {string|null} password - Password, or `null` for an email link.
+   * @param {string|null} emailLink - Email sign-in link, or `null` for a password.
+   * @returns {EmailAuthCredential} The constructed credential.
    */
   constructor(providerId, signInMethod, email, password, emailLink) {
     super(providerId, signInMethod);
@@ -148,7 +162,8 @@ export class EmailAuthCredential extends AuthCredential {
     if (authCredential == null) {
       return null;
     }
-    const res = JSON.parse(authCredential);
+    argCheck(authCredential, "Invalid credential", true, [typeStrings.STRING, typeStrings.OBJECT]);
+    const res = typeof authCredential === "string" ? JSON.parse(authCredential) : authCredential;
     const emailCred = new EmailAuthCredential(res.providerId, res.signInMethod,
        res.email, res.password, res.emailLink);
     return emailCred;
@@ -157,7 +172,11 @@ export class EmailAuthCredential extends AuthCredential {
 }
 
 /**
- * Credential class for OAuthCredential.
+ * Credential for OAuth and OpenID Connect providers.
+ *
+ * @extends AuthCredential
+ * @example
+ * const credential = GoogleAuthProvider.credential(idToken, accessToken);
  */
 export class OAuthCredential extends AuthCredential {
   accessToken = "";
@@ -192,16 +211,21 @@ export class OAuthCredential extends AuthCredential {
    * @returns {OAuthCredential} OAuthCredential instance.
    */
   static fromJSON(authCredential) {
-    argCheck(authCredential, "Invalid object", true, [typeStrings.OBJECT]);
-    const res = JSON.parse(authCredential);
+    argCheck(authCredential, "Invalid credential", true, [typeStrings.STRING, typeStrings.OBJECT]);
+    const res = typeof authCredential === "string" ? JSON.parse(authCredential) : authCredential;
     const oauth = new OAuthCredential(res.providerId, res.signInMethod);
     oauth.accessToken = res.accessToken;
     oauth.idToken = res.idToken;
+    return oauth;
   }
 }
 
 /**
- * Credential class for SAMLAuthCredential.
+ * Credential for SAML providers.
+ *
+ * @extends AuthCredential
+ * @example
+ * const credential = SAMLAuthProvider.credential(idToken, accessToken);
  */
 export class SAMLAuthCredential extends AuthCredential {
   accessToken = "";
@@ -236,10 +260,11 @@ export class SAMLAuthCredential extends AuthCredential {
    * @returns {SAMLAuthCredential} SAMLAuthCredential instance.
    */
   static fromJSON(authCredential) {
-    argCheck(authCredential, "Invalid object", true, [typeStrings.OBJECT]);
-    const res = JSON.parse(authCredential);
+    argCheck(authCredential, "Invalid credential", true, [typeStrings.STRING, typeStrings.OBJECT]);
+    const res = typeof authCredential === "string" ? JSON.parse(authCredential) : authCredential;
     const oauth = new SAMLAuthCredential(res.providerId, res.signInMethod);
     oauth.accessToken = res.accessToken;
     oauth.idToken = res.idToken;
+    return oauth;
   }
 }

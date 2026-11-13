@@ -160,7 +160,11 @@ function resolveMaxUploadBytes(value) {
 }
 
 /**
- * Storage - Represents the Storage service.
+ * Object-storage service for the configured Fusabase application.
+ *
+ * @example
+ * const storage = appInstance.storage();
+ * const ref = storage.ref('images/logo.png');
  */
 export class Storage {
   /**
@@ -211,6 +215,7 @@ export class Storage {
    * Creates a new `Storage` instance.
    *
    * @param {App} app - ObaaS App instance.
+   * @returns {Storage} The configured Storage service.
    */
   constructor(app) {
     const configuredMaxUploadBytes =
@@ -236,6 +241,8 @@ export class Storage {
    * Returns the Fusabase App instance.
    *
    * @returns {App} Fusabase App.
+   * @example
+   * console.log(storage.app.name);
    */
   get app() {
     return this.#app;
@@ -246,6 +253,8 @@ export class Storage {
    * Returns the log level.
    *
    * @returns {number} Log level.
+   * @example
+   * console.log(storage.logLevel);
    */
   get logLevel() {
     return this.#app.logLevel;
@@ -256,6 +265,8 @@ export class Storage {
    * Returns the storage bucket.
    *
    * @returns {string} Storage bucket.
+   * @example
+   * console.log(storage.bucket);
    */
   get bucket() {
     return this.#storageHelper.bucket;
@@ -266,6 +277,8 @@ export class Storage {
    * Returns the storage configuration.
    *
    * @returns {Object} Storage config.
+   * @example
+   * console.log(storage.config.module);
    */
   get config() {
     return this.#storageHelper.config;
@@ -276,6 +289,9 @@ export class Storage {
    * Sets the maximum operation retry time.
    *
    * @param {number} t - Time in milliseconds.
+   * @returns {void} This method does not return a value.
+   * @example
+   * storage.setMaxOperationRetryTime(30_000);
    */
   setMaxOperationRetryTime(t) {
     argCheck(t, "Time should be a valid number", true, [typeStrings.INT]);
@@ -287,6 +303,9 @@ export class Storage {
    * Sets the maximum upload retry time.
    *
    * @param {number} t - Time in milliseconds.
+   * @returns {void} This method does not return a value.
+   * @example
+   * storage.setMaxUploadRetryTime(30_000);
    */
   setMaxUploadRetryTime(t) {
     argCheck(t, "Time should be a valid number", true, [typeStrings.INT]);
@@ -370,6 +389,8 @@ export class Storage {
    *
    * @param {string} [path=""] - Path.
    * @returns {Reference} Reference instance.
+   * @example
+   * const ref = storage.ref('images/logo.png');
    */
   ref(path = "") {
     argCheck(path, StorageErrorMessages.INVALID_REFERENCE_PATH, false, [typeStrings.STRING]);
@@ -385,6 +406,8 @@ export class Storage {
    *
    * @param {string} url - URL.
    * @returns {Reference} Reference instance.
+   * @example
+   * const ref = storage.refFromURL(downloadUrl);
    */
   refFromURL(url) {
     argCheck(url, StorageErrorMessages.INVALID_REFERENCE_URL, true, [typeStrings.STRING]);

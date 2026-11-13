@@ -82,24 +82,11 @@ export class PersistenceUserManager {
   }
 
   /**
-   * Stringifies the tokens object, stringifying the access_token first.
-   * @private
-   * @param {Object} tokens - The tokens object to stringify.
-   * @returns {string} The JSON string of tokens.
-   */
-  #tokensStringify(tokens) {
-    tokens.access_token = tokens.access_token.stringify();
-    tokens = JSON.stringify(tokens);
-    return tokens;
-  }
-
-  /**
    * Sets the persistence type and migrates existing tokens if necessary.
    * @param {string} persistence - The new persistence type (LOCAL, SESSION, or NONE).
    * @returns {Promise<void>}
    */
   async setPersistence(persistence) {
-    var token_stringify = null;
     if (persistence === this.persistence.type) {
       return;
     }
@@ -108,14 +95,7 @@ export class PersistenceUserManager {
     if (tokens) {
       await this.persistence._remove(this.token_key);
       tokens = this.#tokensParse(tokens);
-      const temp_access_token = new IdTokenResult(tokens.access_token.token)
       tokens.access_token = new IdTokenResult(tokens.access_token.token);
-
-      token_stringify = {
-        access_token: temp_access_token,
-        refresh_token: tokens.refresh_token,
-      }
-      token_stringify = this.#tokensStringify(token_stringify);
     }
 
     if (persistence === persistenceType.LOCAL) {
@@ -124,7 +104,6 @@ export class PersistenceUserManager {
         await this.persistence._set(this.token_key, tokens);
         this.persistenceListener.postMessage({
           name: "login_local",
-          tokens: token_stringify,
         });
       }
     }
@@ -134,7 +113,6 @@ export class PersistenceUserManager {
         await this.persistence._set(this.token_key, tokens);
         this.persistenceListener.postMessage({
           name: "login_session_none",
-          tokens: token_stringify,
         });
       }
     }
@@ -144,7 +122,6 @@ export class PersistenceUserManager {
         await this.persistence._set(this.token_key, tokens);
         this.persistenceListener.postMessage({
           name: "login_session_none",
-          tokens: token_stringify,
         });
       }
     }

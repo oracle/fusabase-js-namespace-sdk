@@ -27,10 +27,13 @@
 
 import { nullCheck } from "../utils/typecheck.js";
 import { validateDenseVector, validateSparseEmbedding } from "../utils/utils.js";
+import { oracledbErrorHandler } from "../errors.js";
 
 /**
- * Represents a operation for a fieldvalue in a 
- * document to be applied to server.
+ * Sentinel value describing a server-side field transformation.
+ *
+ * @example
+ * await db.collection('counters').doc('daily').update({ count: FieldValue.increment(1) });
  */
 export class FieldValue {
 
@@ -48,11 +51,13 @@ export class FieldValue {
 
   /**
    * Creates a new `FieldValue` instance.
-   * Private constructor
+   * Creates a field transformation. Prefer the static factory methods such as
+   * `increment()` and `arrayUnion()`.
    *
    * @param {string} op - The type of operation to be applied on the field.
    * @param {Array|string|number} value - The value changed that needs to be 
    * applied.
+   * @returns {FieldValue} The constructed transformation.
    */
   constructor(op, value) {
     this.#value = value;
@@ -67,6 +72,9 @@ export class FieldValue {
    * @returns {boolean} `true` if both are equal, `false` otherwise.
    * @throws {OracledbError} Throws an error if the provided object is not an 
    * instance of `FieldValue`.
+   *
+   * @example
+   * FieldValue.increment(1).isEqual(FieldValue.increment(1));
    */
   isEqual(other) {
     if (!(other instanceof FieldValue)) {
@@ -84,6 +92,9 @@ export class FieldValue {
    * Gets the value change.
    *
    * @returns {Array|string|number} The value change.
+   *
+   * @example
+   * console.log(FieldValue.increment(1).value); // 1
    */
   get value() {
     return this.#value;
@@ -94,6 +105,9 @@ export class FieldValue {
    * Gets the type of the operation on field value.
    *
    * @returns {string} The type of operation.
+   *
+   * @example
+   * console.log(FieldValue.delete().operation); // "FieldValue:delete"
    */
   get operation() {
     return this.#operation;
@@ -104,8 +118,11 @@ export class FieldValue {
    * @property {Function} arrayRemove
    * Creates a `FieldValue` instance for remove operation in a array field.
    *
-   * @param {number} elements - Multiple values that needs to be removed.
+   * @param {...any} elements - Values to remove from an array field.
    * @returns {FieldValue} `FieldValue` instance representing the change.
+   *
+   * @example
+   * await ref.update({ tags: FieldValue.arrayRemove('archived') });
    */
   static arrayRemove(...elements) {
     nullCheck(elements, "Invalid arguments passed");
@@ -117,9 +134,11 @@ export class FieldValue {
    * @property {Function} arrayUnion
    * Creates a `FieldValue` instance for union operation in a array field.
    *
-   * @param {number} elements - Multiple values that needs to be
-   *  applied in union.
+   * @param {...any} elements - Values to add when not already present.
    * @returns {FieldValue} `FieldValue` instance representing the change.
+   *
+   * @example
+   * await ref.update({ tags: FieldValue.arrayUnion('featured') });
    */
   static arrayUnion(...elements) {
     nullCheck(elements, "Invalid arguments passed");
@@ -132,20 +151,48 @@ export class FieldValue {
    * Creates a `FieldValue` instance for delete operation of a field.
    *
    * @returns {FieldValue} `FieldValue` instance representing the change.
+   *
+   * @example
+   * await ref.update({ obsoleteField: FieldValue.delete() });
    */
   static delete() {
     return new FieldValue("FieldValue:delete", null);
   }
 
+  /**
+   * Creates a transformation that removes a vector field.
+   *
+   * @returns {FieldValue} Vector-delete transformation.
+   * @example
+   * await ref.update({ embedding: FieldValue.deleteVector() });
+   */
   static deleteVector() {
     return new FieldValue("FieldValue:deleteVector", null);
   }
 
+  /**
+   * Creates a dense vector value for vector fields and vector search.
+   *
+   * @param {number[]} values - Numeric vector values.
+   * @returns {{type: string, values: number[]}} Dense vector value.
+   * @example
+   * await ref.set({ embedding: FieldValue.denseVector([0.1, 0.2]) });
+   */
   static denseVector(values) {
     validateDenseVector(values, "denseVector values must be a numeric array.");
     return { type: "dense", values };
   }
 
+  /**
+   * Creates a sparse vector value for vector fields and vector search.
+   *
+   * @param {number} dimension - Total vector dimension.
+   * @param {number[]} indices - Non-zero element indices.
+   * @param {number[]} values - Values corresponding to `indices`.
+   * @returns {{type: string, dimension: number, indices: number[], values: number[]}} Sparse vector value.
+   * @example
+   * const embedding = FieldValue.sparseVector(8, [1, 5], [0.7, 0.3]);
+   */
   static sparseVector(dimension, indices, values) {
     validateSparseEmbedding({ type: "sparse", dimension, indices, values });
     return { type: "sparse", dimension, indices, values };
@@ -158,6 +205,9 @@ export class FieldValue {
    *
    * @param {number} value - The value to increment by. 
    * @returns {FieldValue} `FieldValue` instance representing the change.
+   *
+   * @example
+   * await ref.update({ count: FieldValue.increment(1) });
    */
   static increment(value) {
     nullCheck(value, "Invalid argument passed");
@@ -170,6 +220,9 @@ export class FieldValue {
    * Creates a `FieldValue` instance for getting a server timestamp.
    *
    * @returns {FieldValue} `FieldValue` instance representing the change.
+   *
+   * @example
+   * await ref.update({ updatedAt: FieldValue.serverTimestamp() });
    */
   static serverTimestamp() {
     return new FieldValue("FieldValue:serverTimestamp", "servertimestamp");

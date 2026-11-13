@@ -33,11 +33,49 @@ import type {
   Unsubscribe,
 } from './public-types.js';
 
+/**
+ * Initializes App Trust for an application.
+ *
+ * @param app Initialized Fusabase application.
+ * @param options App Trust provider configuration.
+ * @returns The App Trust instance.
+ * @example
+ * const appTrust = initializeAppTrust(app, { provider: new ReCaptchaV3Provider(siteKey) });
+ */
 export declare function initializeAppTrust(app: App | undefined, options: AppTrustOptions): AppTrust;
 
+/**
+ * Gets a cached or newly attested App Trust token.
+ *
+ * @param appTrustInstance Instance returned by {@link initializeAppTrust}.
+ * @param forceRefresh Whether to bypass a valid cached token.
+ * @returns Token data and its cache expiry time.
+ * @example
+ * const tokenResult = await getToken(appTrust);
+ */
 export declare function getToken(appTrustInstance: AppTrust, forceRefresh?: boolean): Promise<AppTrustTokenResult>;
 
+/**
+ * Registers an App Trust token listener.
+ *
+ * @param appTrustInstance Instance returned by {@link initializeAppTrust}.
+ * @param observer Observer callbacks.
+ * @returns A function that removes the listener.
+ * @example
+ * const unsubscribe = onTokenChanged(appTrust, { next: console.log });
+ */
 export declare function onTokenChanged(appTrustInstance: AppTrust, observer: { next?: (value: AppTrustTokenResult) => void; error?: (err: Error) => void; complete?: () => void }): Unsubscribe;
+/**
+ * Registers App Trust token callbacks.
+ *
+ * @param appTrustInstance Instance returned by {@link initializeAppTrust}.
+ * @param onNext Callback for a new token.
+ * @param onError Callback for exceptions thrown by `onNext`.
+ * @param onCompletion Accepted for compatibility; it is not called.
+ * @returns A function that removes the listener.
+ * @example
+ * const unsubscribe = onTokenChanged(appTrust, console.log, console.error);
+ */
 export declare function onTokenChanged(
   appTrustInstance: AppTrust,
   onNext: (tokenResult: AppTrustTokenResult) => void,

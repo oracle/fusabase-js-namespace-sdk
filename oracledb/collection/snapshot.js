@@ -33,7 +33,11 @@ import { parseTimeInDocument } from "../utils/timestamp_util.js";
 import { FieldPath } from "../field/path.js";
 
 /**
- * QuerySnapshot - Snapshot class to store the results of query execution.
+ * Result of a collection query at a point in time.
+ *
+ * @example
+ * const snapshot = await db.collection('users').get();
+ * console.log(snapshot.size, snapshot.empty);
  */
 export class QuerySnapshot {
 
@@ -43,6 +47,7 @@ export class QuerySnapshot {
    * @param {Array} snaps - Array of document snapshots.
    * @param {Query} query - Underlying query.
    * @param {SnapshotMetadata} metadata - Snapshot metadata.
+   * @returns {QuerySnapshot} The constructed query snapshot.
    */
   constructor(snaps, query, metadata) {
     this._docs = snaps;
@@ -55,6 +60,8 @@ export class QuerySnapshot {
    * Returns the number of documents in the snapshot.
    *
    * @returns {number} Number of documents.
+   * @example
+   * console.log(snapshot.size);
    */
   get size() {
     return this._docs.length;
@@ -65,6 +72,8 @@ export class QuerySnapshot {
    * Returns the array of document snapshots.
    *
    * @returns {Array} Array of documents.
+   * @example
+   * const first = snapshot.docs[0];
    */
   get docs() {
     return this._docs;
@@ -75,6 +84,8 @@ export class QuerySnapshot {
    * Returns whether the snapshot is empty.
    *
    * @returns {boolean} True if empty, false otherwise.
+   * @example
+   * if (snapshot.empty) console.log('No matching documents');
    */
   get empty() {
     return this._docs.length === 0;
@@ -85,6 +96,9 @@ export class QuerySnapshot {
    * Enumerates all of the documents.
    *
    * @param {Function} callback - Callback function to execute for each document.
+   * @returns {void} This method does not return a value.
+   * @example
+   * snapshot.forEach((document) => console.log(document.id));
    */
   forEach(callback) {
     argCheck(callback, "Invalid callback", true, [typeStrings.FUNCTION]);
@@ -97,6 +111,8 @@ export class QuerySnapshot {
    *
    * @param {Object} [options] - Options for changes.
    * @returns {Array} Array of document changes.
+   * @example
+   * snapshot.docChanges().forEach((change) => console.log(change.type));
    */
   docChanges(options) {
     let docsChanged = [];
@@ -119,6 +135,8 @@ export class QuerySnapshot {
    * @param {QuerySnapshot} snap - Snapshot to compare.
    * @returns {boolean} True if equal, false otherwise.
    * @throws {OracledbError} Throws an error if snap is not a QuerySnapshot instance.
+   * @example
+   * snapshot.isEqual(otherSnapshot);
    */
   isEqual(snap) {
     if (!(snap instanceof QuerySnapshot)) {
@@ -174,7 +192,11 @@ export class QuerySnapshot {
 }
 
 /**
- * DocumentSnapshot - Snapshot class to store the result of document get.
+ * Result of reading one document.
+ *
+ * @example
+ * const snapshot = await db.collection('users').doc('ada').get();
+ * if (snapshot.exists) console.log(snapshot.data());
  */
 export class DocumentSnapshot {
   /**
@@ -183,6 +205,7 @@ export class DocumentSnapshot {
    * @param {Object} data - Document data.
    * @param {DocumentReference} ref - Document reference.
    * @param {SnapshotMetadata} [metadata=new SnapshotMetadata(false, false)] - Snapshot metadata.
+   * @returns {DocumentSnapshot} The constructed document snapshot.
    */
   constructor(data, ref, metadata = new SnapshotMetadata(false, false)) {
     this._data = data != null ? parseTimeInDocument(data["DOCUMENT"]) : null;

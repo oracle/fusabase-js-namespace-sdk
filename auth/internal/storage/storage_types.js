@@ -29,6 +29,8 @@
  * @property {string} LOCAL - Local storage persistence.
  * @property {string} SESSION - Session storage persistence.
  * @property {string} NONE - In-memory persistence (no persistent storage).
+ * @example
+ * await auth.setPersistence(Auth.Persistence.LOCAL);
  */
 export const persistenceType = {
     LOCAL: "LOCAL",

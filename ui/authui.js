@@ -31,9 +31,37 @@ import googleIcon from "./icons/web_neutral_rd_na.svg";
 import facebookIcon from "./icons/Facebook_Logo_Secondary.png";
 import githubIcon from "./icons/GitHub_Invertocat_White.svg";
 
-
+/**
+ * Browser UI components for Fusabase Authentication.
+ *
+ * @example
+ * const ui = new authUI.AuthUI(app);
+ * ui.start("#auth-container", {
+ *   signInOptions: [
+ *     auth.EmailAuthProvider.PROVIDER_ID,
+ *     auth.GoogleAuthProvider.PROVIDER_ID
+ *   ],
+ *   signInSuccessUrl: "/home"
+ * });
+ */
 export const authUI = {
+    /**
+     * Renders a ready-to-use sign-in, registration, and sign-out interface.
+     *
+     * Pass either the Fusabase {@link app.App} that owns the authentication
+     * service or its {@link auth.Auth} instance.
+     *
+     * @example
+     * const ui = new authUI.AuthUI(fusabase.app());
+     */
   AuthUI: class {
+      /**
+       * Creates an authentication UI bound to an app or authentication service.
+       *
+       * @param {app.App|auth.Auth} appOrConfig - The initialized app or its
+       * authentication service.
+       * @returns {void}
+       */
       constructor(appOrConfig) {
         if (appOrConfig instanceof app.App) {
           this.app = appOrConfig;
@@ -43,7 +71,37 @@ export const authUI = {
         }
       }
 
-      start(containerId, config) {
+      /**
+       * Mounts the authentication UI in a container.
+       *
+       * The UI supports email/password, Google, Facebook, and GitHub provider
+       * buttons. Select the buttons to display with `signInOptions`, using the
+       * provider `PROVIDER_ID` constants. After a successful sign-in, the
+       * optional callback runs first; returning `false` prevents the optional
+       * redirect.
+       *
+       * @param {string|HTMLElement} containerId - A CSS selector or container
+       * element to replace with the UI.
+       * @param {{signInOptions?: string[], signInSuccessUrl?: string,
+       * callbacks?: {signInSuccessWithAuthResult?: (result: UserCredential, redirectUrl?: string) => boolean}}} [config={}]
+       * UI options. Omit it to render the shell without provider controls.
+       * @returns {void} Does not return a value.
+       * @throws {Error} If `containerId` does not identify an element.
+       * @example
+       * ui.start("#auth-container", {
+       *   signInOptions: [
+       *     auth.EmailAuthProvider.PROVIDER_ID,
+       *     auth.GoogleAuthProvider.PROVIDER_ID,
+       *     auth.FacebookAuthProvider.PROVIDER_ID,
+       *     auth.GithubAuthProvider.PROVIDER_ID
+       *   ],
+       *   signInSuccessUrl: "/dashboard",
+       *   callbacks: {
+       *     signInSuccessWithAuthResult: (result, redirectUrl) => true
+       *   }
+       * });
+       */
+      start(containerId, config = {}) {
         const container = typeof containerId === 'string'
           ? document.querySelector(containerId)
           : containerId;

@@ -27,7 +27,22 @@
 import { getOrCreateBrowserInstanceId } from './instance-id.js';
 import { getCachedAppTrustToken } from './app-trust-token-cache.js';
 
+/**
+ * HTTP header used to send an App Trust token to eligible Fusabase endpoints.
+ *
+ * @type {string}
+ * @example
+ * headers.set(FUSABASE_APP_TRUST_HEADER, appTrustToken);
+ */
 export const FUSABASE_APP_TRUST_HEADER = 'X-BAAS-AppCheck';
+
+/**
+ * HTTP header used to identify the calling app installation to App Trust.
+ *
+ * @type {string}
+ * @example
+ * headers.set(FUSABASE_INSTANCE_ID_HEADER, 'web|my-app|installationid');
+ */
 export const FUSABASE_INSTANCE_ID_HEADER = 'X-BAAS-InstanceId';
 
 function decodePathSegment(segment) {
@@ -92,7 +107,21 @@ function isAppTrustAttestEndpoint(segments, projectId) {
     segments[4] === 'attest';
 }
 
-/** @internal */
+/**
+ * Returns whether an App Trust header may be attached to a request.
+ * A request must target this app's configured ORDS host, project, and app ID;
+ * attestation requests are deliberately excluded.
+ *
+ * @param {object|undefined} app - The owning app instance.
+ * @param {string} url - Absolute request URL to inspect.
+ * @returns {boolean} `true` when App Trust headers are allowed for `url`.
+ *
+ * @example
+ * if (shouldAttachAppTrustHeader(appInstance, requestUrl)) {
+ *   // The request is eligible for App Trust headers.
+ * }
+ * @internal
+ */
 export function shouldAttachAppTrustHeader(app, url) {
   if (typeof url !== 'string') return false;
 
@@ -111,7 +140,18 @@ export function shouldAttachAppTrustHeader(app, url) {
   return true;
 }
 
-/** @internal */
+/**
+ * Returns the best available App Trust token for an app.
+ *
+ * @param {object|undefined} app - The app whose configured,
+ * cached, legacy, or persisted token is read.
+ * @returns {string|undefined} The token, or `undefined` when none is present.
+ *
+ * @example
+ * const token = getAppTrustToken(appInstance);
+ * if (token) headers.set(FUSABASE_APP_TRUST_HEADER, token);
+ * @internal
+ */
 export function getAppTrustToken(app) {
   if (!app) return undefined;
   const optTok = app?.options?.appTrustToken;
@@ -125,7 +165,21 @@ export function getAppTrustToken(app) {
   return undefined;
 }
 
-/** @internal */
+/**
+ * Returns request options with App Trust headers attached when the URL is
+ * eligible. Existing App Trust and instance-ID headers are replaced.
+ *
+ * @param {object|undefined} app - The owning app instance.
+ * @param {string} url - Absolute request URL.
+ * @param {RequestInit} [init] - Existing Fetch request options.
+ * @returns {RequestInit|undefined} The original options for ineligible URLs,
+ * or a copy containing the appropriate headers.
+ *
+ * @example
+ * const init = attachAppTrustHeader(appInstance, requestUrl, { method: 'GET' });
+ * const response = await fetch(requestUrl, init);
+ * @internal
+ */
 export function attachAppTrustHeader(app, url, init) {
   if (!shouldAttachAppTrustHeader(app, url)) return init;
 
